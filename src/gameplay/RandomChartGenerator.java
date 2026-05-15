@@ -162,6 +162,7 @@ public class RandomChartGenerator {
                 case STRUGGLE -> new ChartSettings(45, 1.00, 0.54, 1.45, 6, 0.75, 5, 4, true);
                 case STORM -> new ChartSettings(50, 1.00, 0.48, 1.55, 7, 0.65, 4, 4, true);
                 case BEYOND_THE_ISLAND -> new ChartSettings(55, 1.00, 0.42, 1.65, 8, 0.55, 4, 4, true);
+                case ONE_PULL_ONE_RELEASE -> new ChartSettings(60, 1.00, 0.40, 1.75, 8, 0.55, 4, 4, true);
             };
         }
 

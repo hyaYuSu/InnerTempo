@@ -22,7 +22,12 @@ public final class StageResultStoryCatalog {
         boolean cleared = scoreTracker.getAccuracy() >= GameConfig.CLEAR_ACCURACY;
 
         if (stage instanceof WaveStage waveStage) {
-            return waveStory(waveStage, cleared) + rhythmReflection(scoreTracker);
+            String story = WavesStoryCatalog.resultFor(waveStage, cleared);
+            if (waveStage == WaveStage.ONE_PULL_ONE_RELEASE && cleared) {
+                return story;
+            }
+
+            return story + rhythmReflection(scoreTracker);
         }
 
         if (stage instanceof LittleBellStage littleBellStage) {
@@ -56,26 +61,6 @@ public final class StageResultStoryCatalog {
         }
 
         return "\n\nThe rhythm was uneven, but it stayed readable enough to carry the scene forward.";
-    }
-
-    private static String waveStory(WaveStage stage, boolean cleared) {
-        if (!cleared) {
-            return switch (stage) {
-                case DRIFT -> "I reached for the first wave before I understood it. The water passed under me, but the board stayed close.";
-                case FIRST_WAVES -> "I fell before the ride began. Salt filled my mouth, and the next wave was already forming.";
-                case STRUGGLE -> "I watched the wave go on without me. It did not feel cruel. It only reminded me that I had to paddle back.";
-                case STORM -> "The storm took my balance before I could find the rhythm. I came up breathing hard, still holding the board.";
-                case BEYOND_THE_ISLAND -> "I tried to move with the water, but fear pulled me stiff again. The sea kept going, patient and wide.";
-            };
-        }
-
-        return switch (stage) {
-            case DRIFT -> "I did not ride far, but I stayed on long enough to feel the board answer. A small wave was still a beginning.";
-            case FIRST_WAVES -> "I fell, came up laughing, and paddled back. The sea had not become easier. I had become willing to try again.";
-            case STRUGGLE -> "The wave threw me under, but not away from myself. I learned that getting back on the board was part of the ride.";
-            case STORM -> "The storm stayed loud, but I stopped trying to silence it. I leaned, breathed, and let the wave carry me through.";
-            case BEYOND_THE_ISLAND -> "I was tired, afraid, and moving anyway. Life kept coming in waves, and I finally knew how to meet one.";
-        };
     }
 
     private static String littleBellStory(LittleBellStage stage, boolean cleared) {

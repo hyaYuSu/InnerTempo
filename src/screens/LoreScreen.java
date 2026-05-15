@@ -1,28 +1,42 @@
 package screens;
 
-import config.GameConfig;
 import content.JourneyCatalog;
 import manager.ScreenManager;
 import model.Journey;
 import model.JourneyScene;
 import model.Stages.LittleBellStage;
 import model.Stages.PlayableStage;
-import model.Stages.WaveStage;
+import ui.GameUiFactory;
+import ui.GradientPanel;
 
-import javafx.animation.FadeTransition;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.input.KeyCode;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
-import javafx.util.Duration;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import javax.swing.KeyStroke;
+import javax.swing.Timer;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.util.ArrayList;
+import java.util.List;
 
 public class LoreScreen {
+    private static final String STORY_FONT_FAMILY = "Trebuchet MS";
+    private static final int LORE_TEXT_WIDTH = 880;
+    private static final int TEXT_BOX_HEIGHT = 144;
+    private static final int MAX_PAGE_CHARS = 175;
+    private static final int TYPE_INTERVAL_MILLIS = 25;
+    private static final int TYPE_CHARS_PER_TICK = 1;
+    private static final Color TEXT_BOX_COLOR = new Color(8, 10, 14);
+
     private final ScreenManager controller;
     private final PlayableStage playableStage;
 
@@ -31,126 +45,295 @@ public class LoreScreen {
         this.playableStage = playableStage;
     }
 
-    public Scene create() {
+    public JPanel create() {
         Journey journey = JourneyCatalog.byId(playableStage.getJourneyId());
 
-        BorderPane root = new BorderPane();
-        root.setStyle(backgroundStyle());
+        JPanel root = new GradientPanel(backgroundTop(), backgroundBottom());
+        root.setLayout(new BorderLayout());
+        root.setFocusable(true);
 
-        Text bgText = new Text(backgroundLabel(journey));
-        bgText.setFill(backgroundTextColor());
-        bgText.setFont(Font.font("Georgia", 30));
-
-        Text character = new Text(characterSymbol());
-        character.setFill(Color.LIGHTGRAY);
-        character.setFont(Font.font(100));
-
-        VBox center = new VBox(40, bgText, character);
-        center.setAlignment(Pos.CENTER);
-
-        Text speaker = new Text(speakerName(journey));
-        speaker.setFill(Color.GOLDENROD);
-        speaker.setFont(Font.font("Georgia", FontWeight.BOLD, 18));
-
-        Text lore = new Text();
-        lore.setFill(Color.WHITE);
-        lore.setFont(Font.font("Georgia", 22));
-        lore.setWrappingWidth(880);
-
-        Text prompt = new Text("SPACE");
-        prompt.setFill(Color.LIGHTGRAY);
-        prompt.setFont(Font.font("Georgia", FontWeight.BOLD, 14));
-
-        VBox textContent = new VBox(8, speaker, lore, prompt);
-        textContent.setAlignment(Pos.CENTER_LEFT);
-
-        StackPane textBox = new StackPane(textContent);
-        textBox.setPrefHeight(140);
-        textBox.setStyle(
-                "-fx-background-color: rgba(0,0,0,0.65);"
-                        + "-fx-border-color: white;"
-                        + "-fx-border-width: 2;"
-                        + "-fx-padding: 18 30 18 30;"
+        JLabel bgText = GameUiFactory.createLabel(
+                backgroundLabel(journey),
+                backgroundTextColor(),
+                new Font(STORY_FONT_FAMILY, Font.PLAIN, 30)
         );
+        bgText.setAlignmentX(JLabel.LEFT_ALIGNMENT);
 
-        root.setCenter(center);
-        root.setBottom(textBox);
+        JLabel character = GameUiFactory.createLabel(
+                characterSymbol(),
+                Color.LIGHT_GRAY,
+                new Font(STORY_FONT_FAMILY, Font.PLAIN, 100)
+        );
+        character.setAlignmentX(JLabel.CENTER_ALIGNMENT);
 
-        String[] lines = loreLines();
+        JPanel centerContent = new JPanel();
+        centerContent.setOpaque(false);
+        centerContent.setLayout(new BoxLayout(centerContent, BoxLayout.Y_AXIS));
+        centerContent.setBorder(BorderFactory.createEmptyBorder(70, 80, 70, 80));
+        centerContent.add(bgText);
+        centerContent.add(Box.createVerticalStrut(40));
+        centerContent.add(character);
+
+        JLabel speaker = GameUiFactory.createLabel(
+                speakerName(journey),
+                new Color(218, 165, 32),
+                new Font(STORY_FONT_FAMILY, Font.BOLD, 18)
+        );
+        JTextArea lore = GameUiFactory.createWrappedText(
+                "",
+                Color.WHITE,
+                new Font(STORY_FONT_FAMILY, Font.PLAIN, 19),
+                LORE_TEXT_WIDTH
+        );
+        JLabel prompt = GameUiFactory.createLabel(
+                "SPACE",
+                Color.LIGHT_GRAY,
+                new Font(STORY_FONT_FAMILY, Font.BOLD, 14)
+        );
+        speaker.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lore.setAlignmentX(Component.LEFT_ALIGNMENT);
+        prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
+        speaker.setOpaque(true);
+        lore.setOpaque(true);
+        prompt.setOpaque(true);
+        speaker.setBackground(TEXT_BOX_COLOR);
+        lore.setBackground(TEXT_BOX_COLOR);
+        prompt.setBackground(TEXT_BOX_COLOR);
+
+        JPanel textContent = new JPanel();
+        textContent.setOpaque(true);
+        textContent.setBackground(TEXT_BOX_COLOR);
+        textContent.setLayout(new BoxLayout(textContent, BoxLayout.Y_AXIS));
+        textContent.setAlignmentX(Component.LEFT_ALIGNMENT);
+        textContent.add(speaker);
+        Component speakerGap = Box.createVerticalStrut(3);
+        textContent.add(speakerGap);
+        textContent.add(lore);
+        textContent.add(Box.createVerticalStrut(4));
+        textContent.add(prompt);
+
+        JPanel textBox = new JPanel(new BorderLayout());
+        textBox.setOpaque(true);
+        textBox.setBackground(TEXT_BOX_COLOR);
+        textBox.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.WHITE, 2),
+                BorderFactory.createEmptyBorder(10, 30, 10, 30)
+        ));
+        textBox.setPreferredSize(new Dimension(1000, TEXT_BOX_HEIGHT));
+        textBox.add(textContent, BorderLayout.CENTER);
+
+        root.add(textBox, BorderLayout.SOUTH);
+        root.add(centerContent, BorderLayout.CENTER);
+
+        List<LorePage> pages = lorePages(speakerName(journey));
         int[] lineIndex = {0};
-        showLoreLine(lore, lines[lineIndex[0]]);
+        String[] fullPageText = {""};
+        int[] visibleCharacters = {0};
+        Timer[] typingTimer = {null};
+        startLorePage(speaker, speakerGap, lore, prompt, pages, lineIndex[0], fullPageText, visibleCharacters, typingTimer);
 
-        Scene scene = new Scene(root, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
-        scene.setOnKeyPressed(e -> {
-            if (e.getCode() != KeyCode.SPACE) {
-                return;
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke("SPACE"), "nextLoreLine");
+        root.getActionMap().put("nextLoreLine", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (visibleCharacters[0] < fullPageText[0].length()) {
+                    completeLorePage(lore, fullPageText, visibleCharacters, typingTimer);
+                    return;
+                }
+
+                lineIndex[0]++;
+
+                if (lineIndex[0] >= pages.size()) {
+                    stopTyping(typingTimer);
+                    controller.startStage(playableStage);
+                    return;
+                }
+
+                startLorePage(speaker, speakerGap, lore, prompt, pages, lineIndex[0], fullPageText, visibleCharacters, typingTimer);
             }
-
-            lineIndex[0]++;
-
-            if (lineIndex[0] >= lines.length) {
-                controller.startStage(playableStage);
-                return;
-            }
-
-            showLoreLine(lore, lines[lineIndex[0]]);
         });
 
-        return scene;
+        return root;
     }
 
-    private void showLoreLine(Text lore, String line) {
-        lore.setText(line);
-        lore.setOpacity(0);
+    private void startLorePage(
+            JLabel speaker,
+            Component speakerGap,
+            JTextArea lore,
+            JLabel prompt,
+            List<LorePage> pages,
+            int pageIndex,
+            String[] fullPageText,
+            int[] visibleCharacters,
+            Timer[] typingTimer
+    ) {
+        stopTyping(typingTimer);
 
-        FadeTransition fade = new FadeTransition(Duration.millis(260), lore);
-        fade.setFromValue(0);
-        fade.setToValue(1);
-        fade.play();
+        LorePage page = pages.get(pageIndex);
+        boolean narration = page.speaker().equalsIgnoreCase("Narrator");
+        speaker.setVisible(!narration);
+        speakerGap.setVisible(!narration);
+        speaker.setText(narration ? "" : page.speaker());
+        fullPageText[0] = displayTextFor(page);
+        visibleCharacters[0] = 0;
+        lore.setText("");
+        prompt.setText("SPACE  " + (pageIndex + 1) + "/" + pages.size());
+        lore.setCaretPosition(0);
+        lore.revalidate();
+        speaker.repaint();
+        lore.repaint();
+        prompt.repaint();
+
+        typingTimer[0] = new Timer(TYPE_INTERVAL_MILLIS, e -> revealNextTextChunk(lore, fullPageText, visibleCharacters, typingTimer));
+        typingTimer[0].start();
     }
 
-    private String[] loreLines() {
-        if (playableStage instanceof WaveStage waveStage) {
-            return switch (waveStage) {
-                case DRIFT -> new String[] {
-                        "The board felt heavier than it looked.",
-                        "I stood where the foam reached my feet.",
-                        "\"Just one small wave,\" I told myself.",
-                        "\"I do not have to be ready for the whole sea.\""
-                };
-                case FIRST_WAVES -> new String[] {
-                        "The first wave lifted me and dropped me fast.",
-                        "I came up coughing.",
-                        "Then I laughed, because for one second, I had moved with it.",
-                        "\"Again,\" I said, before fear could answer."
-                };
-                case STRUGGLE -> new String[] {
-                        "Watching from shore made it look easy.",
-                        "Paddling back after every fall did not.",
-                        "\"Life does this too,\" I whispered.",
-                        "\"It knocks, waits, and comes again.\""
-                };
-                case STORM -> new String[] {
-                        "The sky turned gray.",
-                        "The water forgot how to be gentle.",
-                        "My hands shook around the board.",
-                        "\"Do not beat the wave,\" I told myself. \"Read it.\""
-                };
-                case BEYOND_THE_ISLAND -> new String[] {
-                        "My arms hurt.",
-                        "My knees were scraped.",
-                        "I was still afraid.",
-                        "But when the next wave came, I breathed and said, \"Come on, then.\""
-                };
-            };
+    private void revealNextTextChunk(
+            JTextArea lore,
+            String[] fullPageText,
+            int[] visibleCharacters,
+            Timer[] typingTimer
+    ) {
+        visibleCharacters[0] = Math.min(fullPageText[0].length(), visibleCharacters[0] + TYPE_CHARS_PER_TICK);
+        lore.setText(fullPageText[0].substring(0, visibleCharacters[0]));
+        lore.setCaretPosition(0);
+
+        if (visibleCharacters[0] >= fullPageText[0].length()) {
+            stopTyping(typingTimer);
+        }
+    }
+
+    private void completeLorePage(
+            JTextArea lore,
+            String[] fullPageText,
+            int[] visibleCharacters,
+            Timer[] typingTimer
+    ) {
+        stopTyping(typingTimer);
+        visibleCharacters[0] = fullPageText[0].length();
+        lore.setText(fullPageText[0]);
+        lore.setCaretPosition(0);
+        lore.repaint();
+    }
+
+    private void stopTyping(Timer[] typingTimer) {
+        if (typingTimer[0] != null) {
+            typingTimer[0].stop();
+            typingTimer[0] = null;
+        }
+    }
+
+    private String displayTextFor(LorePage page) {
+        if (!page.quoted()) {
+            return page.text();
         }
 
+        return quoteDialogueText(page.text());
+    }
+
+    private String quoteDialogueText(String text) {
+        String[] lines = text.strip().split("\\R", -1);
+        StringBuilder quotedText = new StringBuilder();
+
+        for (String line : lines) {
+            if (!quotedText.isEmpty()) {
+                quotedText.append('\n');
+            }
+
+            String trimmedLine = line.strip();
+
+            if (trimmedLine.isBlank() || isStageDirection(trimmedLine) || isQuoted(trimmedLine)) {
+                quotedText.append(trimmedLine);
+            } else {
+                quotedText.append('"').append(trimmedLine).append('"');
+            }
+        }
+
+        return quotedText.toString();
+    }
+
+    private boolean isStageDirection(String text) {
+        return text.startsWith("(") && text.endsWith(")");
+    }
+
+    private boolean isQuoted(String text) {
+        return text.length() >= 2 && text.startsWith("\"") && text.endsWith("\"");
+    }
+
+    private List<LorePage> lorePages(String defaultSpeaker) {
         JourneyScene scene = currentScene();
         if (scene.getStoryText().isBlank()) {
-            return new String[] {scene.getSummary()};
+            return List.of(new LorePage(defaultSpeaker, scene.getSummary(), false));
         }
 
-        return scene.getStoryText().split("\\n\\n");
+        List<LorePage> pages = new ArrayList<>();
+
+        for (String block : scene.getStoryText().split("\\R\\s*\\R")) {
+            SpeakerBlock speakerBlock = parseSpeakerBlock(block, defaultSpeaker);
+            for (String pageText : splitIntoPages(speakerBlock.text())) {
+                boolean quoted = speakerBlock.explicitSpeaker()
+                        && !speakerBlock.speaker().equalsIgnoreCase("Narrator");
+                pages.add(new LorePage(speakerBlock.speaker(), pageText, quoted));
+            }
+        }
+
+        return pages.isEmpty() ? List.of(new LorePage(defaultSpeaker, scene.getSummary(), false)) : pages;
+    }
+
+    private SpeakerBlock parseSpeakerBlock(String block, String defaultSpeaker) {
+        String trimmedBlock = block.strip();
+        int firstLineEnd = trimmedBlock.indexOf('\n');
+
+        if (firstLineEnd > 0 && trimmedBlock.substring(0, firstLineEnd).endsWith(":")) {
+            return new SpeakerBlock(
+                    trimmedBlock.substring(0, firstLineEnd - 1),
+                    trimmedBlock.substring(firstLineEnd + 1).strip(),
+                    true
+            );
+        }
+
+        return new SpeakerBlock(defaultSpeaker, trimmedBlock, false);
+    }
+
+    private List<String> splitIntoPages(String text) {
+        List<String> pages = new ArrayList<>();
+        String remaining = text.strip();
+
+        while (remaining.length() > MAX_PAGE_CHARS) {
+            int splitIndex = pageSplitIndex(remaining);
+            pages.add(remaining.substring(0, splitIndex).strip());
+            remaining = remaining.substring(splitIndex).strip();
+        }
+
+        if (!remaining.isBlank()) {
+            pages.add(remaining);
+        }
+
+        return pages;
+    }
+
+    private int pageSplitIndex(String text) {
+        int searchFrom = Math.min(MAX_PAGE_CHARS, text.length() - 1);
+
+        for (int i = searchFrom; i >= MAX_PAGE_CHARS / 2; i--) {
+            char current = text.charAt(i);
+            if ((current == '.' || current == '!' || current == '?' || current == '"') && hasFollowingWhitespace(text, i)) {
+                return i + 1;
+            }
+        }
+
+        for (int i = searchFrom; i >= MAX_PAGE_CHARS / 2; i--) {
+            if (Character.isWhitespace(text.charAt(i))) {
+                return i;
+            }
+        }
+
+        return MAX_PAGE_CHARS;
+    }
+
+    private boolean hasFollowingWhitespace(String text, int index) {
+        return index + 1 >= text.length() || Character.isWhitespace(text.charAt(index + 1));
     }
 
     private JourneyScene currentScene() {
@@ -179,26 +362,40 @@ public class LoreScreen {
         return journey.getBackgroundLabel();
     }
 
-    private String backgroundStyle() {
+    private Color backgroundTop() {
         if (playableStage instanceof LittleBellStage littleBellStage) {
             return switch (littleBellStage) {
-                case EMPTY_BASKET -> "-fx-background-color: linear-gradient(to bottom, #f5c16c, #6b3f2a);";
-                case UNDER_THE_TABLE -> "-fx-background-color: linear-gradient(to bottom, #2b1d18, #090706);";
-                case RAIN_ALLEY -> "-fx-background-color: linear-gradient(to bottom, #263b56, #09111c);";
-                case WINDOW_LIGHT -> "-fx-background-color: linear-gradient(to bottom, #18223b, #3c241c);";
-                case LITTLE_BELL -> "-fx-background-color: linear-gradient(to bottom, #d48a70, #5a3145);";
+                case EMPTY_BASKET -> new Color(245, 193, 108);
+                case UNDER_THE_TABLE -> new Color(43, 29, 24);
+                case RAIN_ALLEY -> new Color(38, 59, 86);
+                case WINDOW_LIGHT -> new Color(24, 34, 59);
+                case LITTLE_BELL -> new Color(212, 138, 112);
             };
         }
 
-        return "-fx-background-color: linear-gradient(to bottom, #112f4a, #06111f);";
+        return new Color(17, 47, 74);
+    }
+
+    private Color backgroundBottom() {
+        if (playableStage instanceof LittleBellStage littleBellStage) {
+            return switch (littleBellStage) {
+                case EMPTY_BASKET -> new Color(107, 63, 42);
+                case UNDER_THE_TABLE -> new Color(9, 7, 6);
+                case RAIN_ALLEY -> new Color(9, 17, 28);
+                case WINDOW_LIGHT -> new Color(60, 36, 28);
+                case LITTLE_BELL -> new Color(90, 49, 69);
+            };
+        }
+
+        return new Color(6, 17, 31);
     }
 
     private Color backgroundTextColor() {
         if (playableStage instanceof LittleBellStage) {
-            return Color.MOCCASIN;
+            return new Color(255, 228, 181);
         }
 
-        return Color.LIGHTBLUE;
+        return new Color(173, 216, 230);
     }
 
     private String characterSymbol() {
@@ -215,5 +412,11 @@ public class LoreScreen {
         }
 
         return journey.getTitle().equals("Waves") ? "Me" : journey.getTitle();
+    }
+
+    private record SpeakerBlock(String speaker, String text, boolean explicitSpeaker) {
+    }
+
+    private record LorePage(String speaker, String text, boolean quoted) {
     }
 }

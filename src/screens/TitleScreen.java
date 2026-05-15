@@ -1,18 +1,21 @@
 package screens;
 
-import config.GameConfig;
+import config.AssetCatalog;
 import manager.ScreenManager;
+import ui.WarmCinematicImagePanel;
 
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.input.KeyCode;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.KeyStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.net.URL;
 
 public class TitleScreen {
     private final ScreenManager controller;
@@ -21,38 +24,56 @@ public class TitleScreen {
         this.controller = controller;
     }
 
-    public Scene create() {
-        BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #050505;");
+    public JPanel create() {
+        JPanel root = new WarmCinematicImagePanel(loadTitleAsset());
+        root.setLayout(new BorderLayout());
+        root.setFocusable(true);
 
-        Text title = new Text("INNER TEMPO");
-        title.setFill(Color.GOLDENROD);
-        title.setFont(Font.font("Georgia", FontWeight.BOLD, 58));
+        JPanel center = new JPanel();
+        center.setOpaque(false);
+        center.setLayout(new javax.swing.BoxLayout(center, javax.swing.BoxLayout.Y_AXIS));
+        center.setBorder(BorderFactory.createEmptyBorder(40, 40, 0, 0));
 
-        Text backgroundText = new Text("Background");
-        backgroundText.setFill(Color.GRAY);
-        backgroundText.setFont(Font.font("Georgia", 24));
+        JLabel title = new JLabel("INNER TEMPO");
+        title.setForeground(new Color(74, 52, 34));
+        title.setFont(new Font("Georgia", Font.BOLD, 60));
+        title.setAlignmentX(JLabel.LEFT_ALIGNMENT);
 
-        Text pressText = new Text("Press SPACE to start...");
-        pressText.setFill(Color.LIGHTGRAY);
-        pressText.setFont(Font.font("Georgia", 18));
+        JLabel subTitle = new JLabel("Find your rhythm.");
+        subTitle.setFont(new Font("Serif", Font.ITALIC, 20));
+        subTitle.setForeground(new Color(216, 193, 106));
+        subTitle.setAlignmentX(JLabel.LEFT_ALIGNMENT);
 
-        VBox center = new VBox(120, title, backgroundText);
-        center.setAlignment(Pos.TOP_LEFT);
-        center.setPadding(new Insets(40));
+        center.add(title);
+        center.add(subTitle);
 
-        root.setCenter(center);
-        root.setBottom(pressText);
-        BorderPane.setAlignment(pressText, Pos.BOTTOM_LEFT);
-        BorderPane.setMargin(pressText, new Insets(20));
+        JLabel pressText = new JLabel("Press SPACE to start...");
+        pressText.setForeground(new Color(229, 184, 96));
+        pressText.setFont(new Font("Georgia", Font.BOLD, 18));
+        pressText.setBorder(BorderFactory.createEmptyBorder(0, 20, 20, 0));
 
-        Scene scene = new Scene(root, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
-        scene.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.SPACE) {
+        root.add(center, BorderLayout.CENTER);
+        root.add(pressText, BorderLayout.SOUTH);
+
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke("SPACE"), "showMainMenu");
+        root.getActionMap().put("showMainMenu", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
                 controller.showMainMenu();
             }
         });
 
-        return scene;
+        return root;
+    }
+
+    private ImageIcon loadTitleAsset() {
+        URL titleUrl = AssetCatalog.titleScreenUrl();
+        if (titleUrl == null) {
+            return null;
+        }
+
+        ImageIcon icon = new ImageIcon(titleUrl);
+        return icon.getIconWidth() > 0 ? icon : null;
     }
 }

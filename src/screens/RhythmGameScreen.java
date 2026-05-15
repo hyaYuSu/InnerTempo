@@ -10,29 +10,30 @@ import model.Note;
 import model.Stages.PlayableStage;
 import score.ScoreTracker;
 import settings.GameplaySettings;
-import ui.GameplayFeedback;
 import ui.GameUiFactory;
+import ui.GameplayFeedback;
 import ui.JudgmentStyle;
 import ui.JourneyTheme;
 import ui.NoteRenderer;
 
-import javafx.animation.AnimationTimer;
-import javafx.animation.PauseTransition;
-import javafx.scene.Group;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.input.KeyCode;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Line;
-import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextAlignment;
-import javafx.util.Duration;
-
+import javax.swing.AbstractAction;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.KeyStroke;
+import javax.swing.Timer;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -45,6 +46,8 @@ public class RhythmGameScreen {
     private static final double PLAYFIELD_LEFT = 220;
     private static final double PLAYFIELD_RIGHT = 780;
     private static final double[] LANE_X = {238, 378, 518, 658};
+    private static final long COMBO_PULSE_NANOS = 140_000_000L;
+    private static final long SHAKE_NANOS = 160_000_000L;
 
     private final ScreenManager controller;
     private final GameplaySettings options;
@@ -54,31 +57,41 @@ public class RhythmGameScreen {
     private final JourneyTheme theme;
     private final StageBeatProfile beatProfile;
 
-    private final List<Group> activeNotes = new ArrayList<>();
+    private final List<NoteVisual> activeNotes = new ArrayList<>();
+    private final List<HitBurst> hitBursts = new ArrayList<>();
+    private final List<BeatPulse> beatPulses = new ArrayList<>();
     private final boolean[] keyHeld = new boolean[4];
-    private Group[] receptors;
-    private Pane root;
-    private VBox pauseOverlay;
-    private Text countdownText;
-    private Text pauseStatsText;
-    private Text scoreText;
-    private Text comboText;
-    private Text accuracyText;
-    private Text progressText;
-    private Rectangle progressFill;
-    private Text debugText;
-    private Text judgmentText;
-    private Text milestoneText;
+
+    private GamePanel root;
+    private JButton backButton;
+    private final List<JButton> pauseButtons = new ArrayList<>();
+    private List<Note> noteData;
     private ScoreTracker scoreTracker;
     private StageMusicPlayer musicPlayer;
+    private Timer timer;
     private long startTime;
     private long pauseStartedAt;
+    private long judgmentStartedAt;
+    private long milestoneStartedAt;
+    private long comboPulseStartedAt;
+    private long shakeStartedAt;
     private boolean paused;
     private boolean countdownComplete;
     private boolean musicStarted;
+    private boolean finished;
     private int lastBeatIndex = -1;
     private double chartEndTime;
-    private AnimationTimer timer;
+    private double noteSpeed;
+    private double currentChartTime;
+    private String countdownText = "3";
+    private boolean countdownVisible = true;
+    private String debugText = "";
+    private boolean debugVisible;
+    private String judgmentText = "";
+    private Color judgmentColor = Color.WHITE;
+    private String milestoneText = "";
+    private Color milestoneColor = Color.WHITE;
+    private String pauseStatsText = "";
 
     public RhythmGameScreen(
             ScreenManager controller,
@@ -95,310 +108,201 @@ public class RhythmGameScreen {
         this.beatProfile = StageBeatProfile.forStage(playableStage).orElse(null);
     }
 
-    public Scene create() {
-        root = new Pane();
-        root.setStyle(theme.getGameplayBackgroundStyle());
+    public JPanel create() {
+        root = new GamePanel();
+        root.setLayout(null);
+        root.setFocusable(true);
 
-        List<Note> noteData = chartGenerator.generateChart(playableStage);
+        noteData = chartGenerator.generateChart(playableStage);
         scoreTracker = new ScoreTracker(noteData.size());
         musicPlayer = new StageMusicPlayer(playableStage);
         chartEndTime = getChartEndTime(noteData) + 0.6;
+        noteSpeed = GameConfig.BASE_NOTE_SPEED * options.getNoteSpeedMultiplier() * stageSpeedMultiplier();
+        currentChartTime = 0;
 
-        createHud();
-        createLaneGuides();
-        createReceptors();
-        createOverlays();
+        createControls();
+        installKeyBindings(root);
 
-        Scene scene = new Scene(root, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
         startTime = System.nanoTime();
-        timer = createTimer(noteData);
-
-        scene.setOnKeyPressed(e -> handleKeyPressed(e.getCode()));
-        scene.setOnKeyReleased(e -> handleKeyReleased(e.getCode()));
-
+        timer = new Timer(16, e -> tick());
         timer.start();
-        return scene;
+
+        return root;
     }
 
-    private void createHud() {
-        Text stageText = new Text("Stage " + playableStage.getNumber() + ": " + playableStage.getTitle());
-        stageText.setFill(theme.getAccentColor());
-        stageText.setFont(Font.font("Georgia", FontWeight.BOLD, 22));
-        stageText.setTextAlignment(TextAlignment.CENTER);
-        stageText.setWrappingWidth(GameConfig.SCENE_WIDTH);
-        stageText.setX(0);
-        stageText.setY(42);
-
-        scoreText = new Text("Score 0");
-        scoreText.setFill(theme.getSoftTextColor());
-        scoreText.setFont(Font.font("Arial", FontWeight.BOLD, 15));
-        scoreText.setOpacity(0.72);
-        scoreText.setTextAlignment(TextAlignment.RIGHT);
-        scoreText.setWrappingWidth(150);
-        scoreText.setX(820);
-        scoreText.setY(42);
-
-        comboText = new Text("Combo 0");
-        comboText.setFill(Color.WHITE);
-        comboText.setFont(Font.font("Arial", FontWeight.BOLD, 22));
-        comboText.setX(32);
-        comboText.setY(560);
-
-        accuracyText = new Text("100%");
-        accuracyText.setFill(theme.getSoftTextColor());
-        accuracyText.setFont(Font.font("Arial", FontWeight.BOLD, 22));
-        accuracyText.setTextAlignment(TextAlignment.RIGHT);
-        accuracyText.setWrappingWidth(160);
-        accuracyText.setX(808);
-        accuracyText.setY(560);
-
-        Rectangle progressBack = new Rectangle(330, 62, 340, 5);
-        progressBack.setFill(Color.rgb(255, 255, 255, 0.18));
-        progressBack.setArcWidth(8);
-        progressBack.setArcHeight(8);
-
-        progressFill = new Rectangle(330, 62, 0, 5);
-        progressFill.setFill(theme.getAccentColor());
-        progressFill.setArcWidth(8);
-        progressFill.setArcHeight(8);
-
-        progressText = new Text("0:00 / " + formatTime(chartEndTime));
-        progressText.setFill(theme.getSoftTextColor());
-        progressText.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        progressText.setOpacity(0.78);
-        progressText.setTextAlignment(TextAlignment.CENTER);
-        progressText.setWrappingWidth(GameConfig.SCENE_WIDTH);
-        progressText.setX(0);
-        progressText.setY(85);
-
-        debugText = new Text("");
-        debugText.setFill(theme.getSoftTextColor());
-        debugText.setFont(Font.font("Arial", FontWeight.BOLD, 14));
-        debugText.setOpacity(0.78);
-        debugText.setX(30);
-        debugText.setY(585);
-        debugText.setVisible(false);
-
-        judgmentText = new Text("");
-        judgmentText.setFill(Color.LIGHTCYAN);
-        judgmentText.setFont(Font.font("Arial", FontWeight.BOLD, 46));
-        judgmentText.setTextAlignment(TextAlignment.CENTER);
-        judgmentText.setWrappingWidth(GameConfig.SCENE_WIDTH);
-        judgmentText.setX(0);
-        judgmentText.setY(315);
-
-        milestoneText = new Text("");
-        milestoneText.setFill(Color.GOLD);
-        milestoneText.setFont(Font.font("Georgia", FontWeight.BOLD, 36));
-        milestoneText.setTextAlignment(TextAlignment.CENTER);
-        milestoneText.setWrappingWidth(GameConfig.SCENE_WIDTH);
-        milestoneText.setX(0);
-        milestoneText.setY(210);
-
-        Button backButton = GameUiFactory.createSmallButton("BACK");
-        backButton.setLayoutX(30);
-        backButton.setLayoutY(25);
-        backButton.setOnAction(e -> {
+    private void createControls() {
+        backButton = GameUiFactory.createSmallButton("BACK");
+        backButton.setBounds(30, 25, 120, 40);
+        backButton.addActionListener(e -> {
             timer.stop();
             stopMusic();
             controller.showJourneySelect(playableStage.getJourneyId());
         });
+        root.add(backButton);
 
-        root.getChildren().addAll(
-                stageText,
-                progressBack,
-                progressFill,
-                progressText,
-                scoreText,
-                comboText,
-                accuracyText,
-                debugText,
-                judgmentText,
-                milestoneText,
-                backButton
-        );
-    }
+        JButton resumeButton = GameUiFactory.createSmallButton("RESUME");
+        JButton retryButton = GameUiFactory.createSmallButton("RETRY");
+        JButton playButton = GameUiFactory.createSmallButton("STAGES");
+        JButton optionsButton = GameUiFactory.createSmallButton("OPTIONS");
 
-    private void createLaneGuides() {
-        double playfieldWidth = PLAYFIELD_RIGHT - PLAYFIELD_LEFT;
-
-        Rectangle hitLineGlow = new Rectangle(PLAYFIELD_LEFT, HIT_Y - 7, playfieldWidth, 14);
-        hitLineGlow.setFill(Color.rgb(255, 255, 255, 0.08));
-        hitLineGlow.setArcWidth(16);
-        hitLineGlow.setArcHeight(16);
-
-        Line hitLine = new Line(PLAYFIELD_LEFT, HIT_Y, PLAYFIELD_RIGHT, HIT_Y);
-        hitLine.setStroke(theme.getAccentColor());
-        hitLine.setStrokeWidth(3);
-        hitLine.setOpacity(0.9);
-
-        root.getChildren().addAll(hitLineGlow, hitLine);
-
-        for (int lane = 0; lane < 4; lane++) {
-            double x = LANE_X[lane] + 52;
-            Line guide = new Line(x, 105, x, HIT_Y + 50);
-            guide.setStroke(theme.laneColor(lane));
-            guide.setStrokeWidth(2);
-            guide.setOpacity(0.25);
-            root.getChildren().add(guide);
-        }
-    }
-
-    private void createReceptors() {
-        receptors = new Group[4];
-
-        for (int lane = 0; lane < 4; lane++) {
-            Group receptor = NoteRenderer.createReceptor(LANE_X[lane] + 52, 525, lane, theme);
-            receptors[lane] = receptor;
-
-            root.getChildren().add(receptor);
-        }
-    }
-
-    private AnimationTimer createTimer(List<Note> noteData) {
-        double noteSpeed = GameConfig.BASE_NOTE_SPEED * options.getNoteSpeedMultiplier() * stageSpeedMultiplier();
-
-        return new AnimationTimer() {
-            private boolean finished;
-
-            @Override
-            public void handle(long now) {
-                double rawTime = rawSecondsSinceStart();
-                updateCountdown(rawTime);
-
-                if (rawTime < COUNTDOWN_SECONDS) {
-                    return;
-                }
-
-                countdownComplete = true;
-                startMusicIfNeeded();
-                double audioTime = gameplaySeconds();
-                double currentTime = chartSeconds(audioTime);
-
-                updateProgress(currentTime);
-                updateBeatPulse(audioTime);
-                updateDebugOverlay(audioTime, currentTime);
-                spawnNotes(noteData, currentTime, noteSpeed);
-                updateActiveNotes(currentTime, noteSpeed);
-
-                if (!finished && currentTime >= chartEndTime) {
-                    finished = true;
-                    stop();
-                    finishStage();
-                }
-            }
-        };
-    }
-
-    private void createOverlays() {
-        countdownText = new Text("3");
-        countdownText.setFill(Color.GOLDENROD);
-        countdownText.setFont(Font.font("Georgia", FontWeight.BOLD, 82));
-        countdownText.setTextAlignment(TextAlignment.CENTER);
-        countdownText.setWrappingWidth(GameConfig.SCENE_WIDTH);
-        countdownText.setX(0);
-        countdownText.setY(310);
-
-        pauseOverlay = new VBox(22);
-        pauseOverlay.setAlignment(javafx.geometry.Pos.CENTER);
-        pauseOverlay.setPrefSize(GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
-        pauseOverlay.setStyle("-fx-background-color: rgba(0,0,0,0.82);");
-        pauseOverlay.setVisible(false);
-
-        Text pausedTitle = new Text("PAUSED");
-        pausedTitle.setFill(Color.GOLDENROD);
-        pausedTitle.setFont(Font.font("Georgia", FontWeight.BOLD, 48));
-
-        pauseStatsText = new Text("");
-        pauseStatsText.setFill(Color.LIGHTGRAY);
-        pauseStatsText.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-        pauseStatsText.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
-
-        Button resumeButton = GameUiFactory.createSmallButton("RESUME");
-        Button retryButton = GameUiFactory.createSmallButton("RETRY");
-        Button playButton = GameUiFactory.createSmallButton("STAGES");
-        Button optionsButton = GameUiFactory.createSmallButton("OPTIONS");
-
-        resumeButton.setOnAction(e -> resumeGame());
-        retryButton.setOnAction(e -> {
+        resumeButton.addActionListener(e -> resumeGame());
+        retryButton.addActionListener(e -> {
             timer.stop();
             stopMusic();
             controller.startStage(playableStage);
         });
-        playButton.setOnAction(e -> {
+        playButton.addActionListener(e -> {
             timer.stop();
             stopMusic();
             controller.showJourneySelect(playableStage.getJourneyId());
         });
-        optionsButton.setOnAction(e -> {
+        optionsButton.addActionListener(e -> {
             timer.stop();
             stopMusic();
             controller.showOptions();
         });
 
-        pauseOverlay.getChildren().addAll(pausedTitle, pauseStatsText, resumeButton, retryButton, playButton, optionsButton);
-        root.getChildren().addAll(countdownText, pauseOverlay);
+        int buttonX = (GameConfig.SCENE_WIDTH - 120) / 2;
+        int y = 300;
+        JButton[] buttons = {resumeButton, retryButton, playButton, optionsButton};
+        for (JButton button : buttons) {
+            button.setBounds(buttonX, y, 120, 40);
+            button.setVisible(false);
+            pauseButtons.add(button);
+            root.add(button);
+            y += 56;
+        }
+    }
+
+    private void installKeyBindings(JComponent component) {
+        bindPress(component, KeyEvent.VK_LEFT);
+        bindPress(component, KeyEvent.VK_UP);
+        bindPress(component, KeyEvent.VK_DOWN);
+        bindPress(component, KeyEvent.VK_RIGHT);
+        bindPress(component, KeyEvent.VK_ESCAPE);
+        bindPress(component, KeyEvent.VK_OPEN_BRACKET);
+        bindPress(component, KeyEvent.VK_CLOSE_BRACKET);
+        bindPress(component, KeyEvent.VK_0);
+
+        bindRelease(component, KeyEvent.VK_LEFT);
+        bindRelease(component, KeyEvent.VK_UP);
+        bindRelease(component, KeyEvent.VK_DOWN);
+        bindRelease(component, KeyEvent.VK_RIGHT);
+    }
+
+    private void bindPress(JComponent component, int keyCode) {
+        String actionKey = "pressed-" + keyCode;
+        component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(keyCode, 0, false), actionKey);
+        component.getActionMap().put(actionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                handleKeyPressed(keyCode);
+            }
+        });
+    }
+
+    private void bindRelease(JComponent component, int keyCode) {
+        String actionKey = "released-" + keyCode;
+        component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(keyCode, 0, true), actionKey);
+        component.getActionMap().put(actionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                handleKeyReleased(keyCode);
+            }
+        });
+    }
+
+    private void tick() {
+        pruneEffects();
+
+        double rawTime = rawSecondsSinceStart();
+        updateCountdown(rawTime);
+
+        if (rawTime < COUNTDOWN_SECONDS) {
+            root.repaint();
+            return;
+        }
+
+        countdownComplete = true;
+        startMusicIfNeeded();
+        double audioTime = gameplaySeconds();
+        double currentTime = chartSeconds(audioTime);
+        currentChartTime = currentTime;
+
+        updateBeatPulse(audioTime);
+        updateDebugOverlay(audioTime, currentTime);
+        spawnNotes(noteData, currentTime, noteSpeed);
+        updateActiveNotes(currentTime, noteSpeed);
+
+        if (!finished && currentTime >= chartEndTime) {
+            finished = true;
+            timer.stop();
+            finishStage();
+        }
+
+        root.repaint();
     }
 
     private void updateCountdown(double rawTime) {
         if (rawTime < 1.0) {
-            countdownText.setText("3");
-            countdownText.setVisible(true);
+            countdownText = "3";
+            countdownVisible = true;
         } else if (rawTime < 2.0) {
-            countdownText.setText("2");
-            countdownText.setVisible(true);
+            countdownText = "2";
+            countdownVisible = true;
         } else if (rawTime < 3.0) {
-            countdownText.setText("1");
-            countdownText.setVisible(true);
+            countdownText = "1";
+            countdownVisible = true;
         } else if (rawTime < 3.55) {
-            countdownText.setText("START");
-            countdownText.setVisible(true);
+            countdownText = "START";
+            countdownVisible = true;
         } else {
-            countdownText.setVisible(false);
+            countdownVisible = false;
         }
     }
 
-    private void spawnNotes(List<Note> noteData, double currentTime, double noteSpeed) {
-        for (Note note : noteData) {
+    private void spawnNotes(List<Note> notes, double currentTime, double pixelsPerSecond) {
+        for (Note note : notes) {
             if (!note.isSpawned() && currentTime >= note.getTime() - GameConfig.SPAWN_LEAD_TIME) {
-                Group noteGroup = NoteRenderer.create(LANE_X[note.getLane()], note, noteSpeed, theme);
-                activeNotes.add(noteGroup);
-                root.getChildren().add(noteGroup);
+                activeNotes.add(new NoteVisual(note, LANE_X[note.getLane()], HIT_Y - ((note.getTime() - currentTime) * pixelsPerSecond)));
                 note.setSpawned(true);
             }
         }
     }
 
-    private void updateActiveNotes(double currentTime, double noteSpeed) {
-        Iterator<Group> iterator = activeNotes.iterator();
+    private void updateActiveNotes(double currentTime, double pixelsPerSecond) {
+        Iterator<NoteVisual> iterator = activeNotes.iterator();
 
         while (iterator.hasNext()) {
-            Group noteGroup = iterator.next();
-            Note note = (Note) noteGroup.getUserData();
+            NoteVisual noteVisual = iterator.next();
+            Note note = noteVisual.note();
 
-            double y = HIT_Y - ((note.getTime() - currentTime) * noteSpeed);
-            noteGroup.setLayoutY(y);
+            noteVisual.setY(HIT_Y - ((note.getTime() - currentTime) * pixelsPerSecond));
 
-            if (note.isHolding()) {
-                updateHeldNote(noteGroup, note, currentTime, iterator);
+            if (note.isHolding() && updateHeldNote(noteVisual, note, currentTime, iterator)) {
+                continue;
             }
 
             if (!note.isHit() && !note.isHolding() && currentTime > note.getTime() + hitJudge.badWindow()) {
-                recordAndRemove(noteGroup, iterator, ScoreTracker.Judgment.MISS, "MISS", false, null);
+                recordAndRemove(noteVisual, iterator, ScoreTracker.Judgment.MISS, "MISS", false, null);
             }
         }
     }
 
-    private void updateHeldNote(Group noteGroup, Note note, double currentTime, Iterator<Group> iterator) {
+    private boolean updateHeldNote(
+            NoteVisual noteVisual,
+            Note note,
+            double currentTime,
+            Iterator<NoteVisual> iterator
+    ) {
         double progress = Math.max(0, Math.min(currentTime, note.getHoldEndTime()) - note.getTime());
         note.setHoldProgress(progress);
 
         if (keyHeld[note.getLane()]) {
             awardHoldTicks(note, currentTime);
         }
-
-        double graceRatio = holdGraceRatio(note, currentTime);
-        NoteRenderer.updateHoldVisuals(noteGroup, note, graceRatio, keyHeld[note.getLane()]);
 
         if (note.isReleaseGraceActive() && currentTime - note.getReleasedAt() > HOLD_RELEASE_GRACE) {
             note.setHoldDropped(true);
@@ -408,45 +312,39 @@ public class RhythmGameScreen {
                     note.getReleasedAt() + options.getInputOffsetSeconds(),
                     false
             );
-            recordAndRemove(noteGroup, iterator, judgment, "DROPPED", true, null);
-            return;
+            recordAndRemove(noteVisual, iterator, judgment, "DROPPED", true, null);
+            return true;
         }
 
         if (keyHeld[note.getLane()] && currentTime >= note.getHoldEndTime()) {
             ScoreTracker.Judgment judgment = finishHold(note, currentTime, currentTime, true);
             recordAndRemove(
-                    noteGroup,
+                    noteVisual,
                     iterator,
                     judgment,
                     JudgmentStyle.text(judgment),
                     true,
                     note.getHoldStartOffsetSeconds()
             );
+            return true;
         }
+
+        return false;
     }
 
     private void awardHoldTicks(Note note, double currentTime) {
         while (note.getNextHoldTickTime() <= currentTime && note.getNextHoldTickTime() < note.getHoldEndTime()) {
             scoreTracker.recordHoldTick();
             note.setNextHoldTickTime(note.getNextHoldTickTime() + HOLD_TICK_INTERVAL);
-            updateScoreText();
         }
     }
 
-    private double holdGraceRatio(Note note, double currentTime) {
-        if (!note.isReleaseGraceActive()) {
-            return 1.0;
-        }
-
-        return 1.0 - ((currentTime - note.getReleasedAt()) / HOLD_RELEASE_GRACE);
-    }
-
-    private void handleKeyPressed(KeyCode code) {
+    private void handleKeyPressed(int code) {
         if (handleCalibrationKey(code)) {
             return;
         }
 
-        if (code == KeyCode.ESCAPE) {
+        if (code == KeyEvent.VK_ESCAPE) {
             togglePause();
             return;
         }
@@ -462,16 +360,16 @@ public class RhythmGameScreen {
         }
 
         keyHeld[lane] = true;
-        GameplayFeedback.setReceptorPressed(receptors[lane], true, theme.laneColor(lane));
 
         if (resumeGraceHold(lane)) {
             return;
         }
 
         checkArrowHit(lane, chartSeconds());
+        root.repaint();
     }
 
-    private void handleKeyReleased(KeyCode code) {
+    private void handleKeyReleased(int code) {
         if (paused || !countdownComplete) {
             return;
         }
@@ -483,18 +381,18 @@ public class RhythmGameScreen {
         }
 
         keyHeld[lane] = false;
-        GameplayFeedback.setReceptorPressed(receptors[lane], false, theme.laneColor(lane));
         releaseHeldNote(lane, chartSeconds());
+        root.repaint();
     }
 
     private void checkArrowHit(int lane, double currentTime) {
         double adjustedTime = currentTime + options.getInputOffsetSeconds();
-        Group closestNote = null;
+        NoteVisual closestNote = null;
         double closestDelta = Double.MAX_VALUE;
         double closestSignedDelta = 0;
 
-        for (Group noteGroup : activeNotes) {
-            Note note = (Note) noteGroup.getUserData();
+        for (NoteVisual noteVisual : activeNotes) {
+            Note note = noteVisual.note();
 
             if (note.getLane() == lane && !note.isHit() && !note.isHolding()) {
                 double signedDelta = adjustedTime - note.getTime();
@@ -503,7 +401,7 @@ public class RhythmGameScreen {
                 if (delta < closestDelta) {
                     closestDelta = delta;
                     closestSignedDelta = signedDelta;
-                    closestNote = noteGroup;
+                    closestNote = noteVisual;
                 }
             }
         }
@@ -512,7 +410,7 @@ public class RhythmGameScreen {
             return;
         }
 
-        Note note = (Note) closestNote.getUserData();
+        Note note = closestNote.note();
         ScoreTracker.Judgment judgment = hitJudge.judge(closestDelta);
 
         if (note.isHoldNote()) {
@@ -524,12 +422,8 @@ public class RhythmGameScreen {
             note.setHoldDropped(false);
             note.setNextHoldTickTime(Math.max(note.getTime(), currentTime) + HOLD_TICK_INTERVAL);
             note.setHoldStartJudgment(judgment);
-            GameplayFeedback.showJudgment(
-                    judgmentText,
-                    JudgmentStyle.text(judgment),
-                    JudgmentStyle.color(judgment)
-            );
-            GameplayFeedback.createHitBurst(root, closestNote, judgment);
+            showJudgment(JudgmentStyle.text(judgment), JudgmentStyle.color(judgment));
+            createHitBurst(closestNote, judgment);
             return;
         }
 
@@ -539,21 +433,19 @@ public class RhythmGameScreen {
         recordNoteBonus(note, judgment, closestNote);
         showComboMilestoneIfNeeded();
         showJudgment(judgment);
-        GameplayFeedback.createHitBurst(root, closestNote, judgment);
+        createHitBurst(closestNote, judgment);
         showMissFeedbackIfNeeded(judgment);
-        updateScoreText();
-        GameplayFeedback.pulseCombo(comboText, scoreTracker.getCombo());
-        root.getChildren().remove(closestNote);
+        pulseCombo(scoreTracker.getCombo());
         activeNotes.remove(closestNote);
     }
 
     private void releaseHeldNote(int lane, double currentTime) {
         double adjustedTime = currentTime + options.getInputOffsetSeconds();
-        Iterator<Group> iterator = activeNotes.iterator();
+        Iterator<NoteVisual> iterator = activeNotes.iterator();
 
         while (iterator.hasNext()) {
-            Group noteGroup = iterator.next();
-            Note note = (Note) noteGroup.getUserData();
+            NoteVisual noteVisual = iterator.next();
+            Note note = noteVisual.note();
 
             if (note.getLane() == lane && note.isHolding()) {
                 double releaseDelta = Math.abs(adjustedTime - note.getHoldEndTime());
@@ -562,7 +454,7 @@ public class RhythmGameScreen {
                 if (hitJudge.canHit(releaseDelta)) {
                     ScoreTracker.Judgment judgment = finishHold(note, currentTime, adjustedTime, false);
                     recordAndRemove(
-                            noteGroup,
+                            noteVisual,
                             iterator,
                             judgment,
                             JudgmentStyle.text(judgment),
@@ -574,21 +466,19 @@ public class RhythmGameScreen {
 
                 note.setReleasedAt(currentTime);
                 note.setReleaseGraceActive(true);
-                GameplayFeedback.showJudgment(judgmentText, "HOLD GRACE", Color.ORANGE);
-                NoteRenderer.updateHoldVisuals(noteGroup, note, 1.0, false);
+                showJudgment("HOLD GRACE", Color.ORANGE);
                 return;
             }
         }
     }
 
     private boolean resumeGraceHold(int lane) {
-        for (Group noteGroup : activeNotes) {
-            Note note = (Note) noteGroup.getUserData();
+        for (NoteVisual noteVisual : activeNotes) {
+            Note note = noteVisual.note();
 
             if (note.getLane() == lane && note.isHolding() && note.isReleaseGraceActive()) {
                 note.setReleaseGraceActive(false);
-                GameplayFeedback.showJudgment(judgmentText, "HOLDING", Color.LIGHTGREEN);
-                NoteRenderer.updateHoldVisuals(noteGroup, note, 1.0, true);
+                showJudgment("HOLDING", new Color(144, 238, 144));
                 return true;
             }
         }
@@ -643,14 +533,14 @@ public class RhythmGameScreen {
     }
 
     private void recordAndRemove(
-            Group noteGroup,
-            Iterator<Group> iterator,
+            NoteVisual noteVisual,
+            Iterator<NoteVisual> iterator,
             ScoreTracker.Judgment judgment,
             String judgmentTextValue,
             boolean showBurst,
             Double signedTimingOffset
     ) {
-        Note note = (Note) noteGroup.getUserData();
+        Note note = noteVisual.note();
         note.setHit(true);
         scoreTracker.record(judgment);
 
@@ -658,56 +548,43 @@ public class RhythmGameScreen {
             scoreTracker.recordTimingOffset(signedTimingOffset);
         }
 
-        recordNoteBonus(note, judgment, noteGroup);
+        recordNoteBonus(note, judgment, noteVisual);
         showComboMilestoneIfNeeded();
 
         if (note.isHoldNote() && judgment != ScoreTracker.Judgment.MISS) {
             scoreTracker.recordHoldReleaseBonus(judgment);
         }
 
-        GameplayFeedback.showJudgment(judgmentText, judgmentTextValue, JudgmentStyle.color(judgment));
+        showJudgment(judgmentTextValue, JudgmentStyle.color(judgment));
 
         if (showBurst) {
-            GameplayFeedback.createHitBurst(root, noteGroup, judgment);
+            createHitBurst(noteVisual, judgment);
         }
 
         showMissFeedbackIfNeeded(judgment);
-        updateScoreText();
-        GameplayFeedback.pulseCombo(comboText, scoreTracker.getCombo());
-        root.getChildren().remove(noteGroup);
+        pulseCombo(scoreTracker.getCombo());
         iterator.remove();
     }
 
     private void showJudgment(ScoreTracker.Judgment judgment) {
-        GameplayFeedback.showJudgment(judgmentText, JudgmentStyle.text(judgment), JudgmentStyle.color(judgment));
+        showJudgment(JudgmentStyle.text(judgment), JudgmentStyle.color(judgment));
+    }
+
+    private void showJudgment(String text, Color color) {
+        judgmentText = text;
+        judgmentColor = color;
+        judgmentStartedAt = System.nanoTime();
     }
 
     private double holdTimingOffset(Note note, double signedReleaseDelta) {
         return (note.getHoldStartOffsetSeconds() + signedReleaseDelta) / 2.0;
     }
 
-    private void updateScoreText() {
-        scoreText.setText("Score " + scoreTracker.getScore());
-        comboText.setText("Combo " + scoreTracker.getCombo());
-        comboText.setFill(scoreTracker.getCombo() >= 25 ? Color.GOLD : Color.WHITE);
-        accuracyText.setText(String.format("%.1f%%", scoreTracker.getCurrentAccuracy()));
-    }
-
-    private void updateProgress(double currentTime) {
-        if (progressFill == null || progressText == null) {
-            return;
-        }
-
-        double progress = chartEndTime <= 0 ? 0 : Math.max(0, Math.min(currentTime / chartEndTime, 1.0));
-        progressFill.setWidth(340 * progress);
-        progressText.setText(formatTime(currentTime) + " / " + formatTime(chartEndTime));
-    }
-
     private void showComboMilestoneIfNeeded() {
         int combo = scoreTracker.getCombo();
 
         if (combo == 10 || combo == 25 || combo == 50 || (combo >= 100 && combo % 100 == 0)) {
-            GameplayFeedback.showStageBanner(milestoneText, combo + " COMBO", Color.GOLD);
+            showStageBanner(combo + " COMBO", new Color(255, 215, 0));
         }
     }
 
@@ -745,20 +622,20 @@ public class RhythmGameScreen {
         return (System.nanoTime() - startTime) / 1_000_000_000.0;
     }
 
-    private boolean handleCalibrationKey(KeyCode code) {
-        if (code == KeyCode.OPEN_BRACKET) {
+    private boolean handleCalibrationKey(int code) {
+        if (code == KeyEvent.VK_OPEN_BRACKET) {
             options.adjustStageChartOffsetMillis(playableStage, -10);
             showCalibrationOffset();
             return true;
         }
 
-        if (code == KeyCode.CLOSE_BRACKET) {
+        if (code == KeyEvent.VK_CLOSE_BRACKET) {
             options.adjustStageChartOffsetMillis(playableStage, 10);
             showCalibrationOffset();
             return true;
         }
 
-        if (code == KeyCode.DIGIT0) {
+        if (code == KeyEvent.VK_0) {
             options.resetStageChartOffset(playableStage);
             showCalibrationOffset();
             return true;
@@ -768,8 +645,7 @@ public class RhythmGameScreen {
     }
 
     private void showCalibrationOffset() {
-        GameplayFeedback.showStageBanner(
-                milestoneText,
+        showStageBanner(
                 String.format("CHART OFFSET %+dms", Math.round(stageChartOffsetSeconds() * 1000)),
                 theme.getSoftTextColor()
         );
@@ -795,11 +671,11 @@ public class RhythmGameScreen {
 
         for (int lane = 0; lane < keyHeld.length; lane++) {
             keyHeld[lane] = false;
-            GameplayFeedback.setReceptorPressed(receptors[lane], false, theme.laneColor(lane));
         }
 
         updatePauseStats();
-        pauseOverlay.setVisible(true);
+        setPauseControlsVisible(true);
+        root.repaint();
     }
 
     private void resumeGame() {
@@ -809,19 +685,22 @@ public class RhythmGameScreen {
 
         startTime += System.nanoTime() - pauseStartedAt;
         paused = false;
-        pauseOverlay.setVisible(false);
+        setPauseControlsVisible(false);
         if (musicStarted) {
             musicPlayer.resume();
         }
         timer.start();
     }
 
-    private void updatePauseStats() {
-        if (pauseStatsText == null) {
-            return;
+    private void setPauseControlsVisible(boolean visible) {
+        backButton.setVisible(!visible);
+        for (JButton button : pauseButtons) {
+            button.setVisible(visible);
         }
+    }
 
-        pauseStatsText.setText(
+    private void updatePauseStats() {
+        pauseStatsText =
                 "Score "
                         + scoreTracker.getScore()
                         + "   Combo "
@@ -833,16 +712,15 @@ public class RhythmGameScreen {
                         + " / "
                         + formatTime(chartEndTime)
                         + "   Chart Offset "
-                        + String.format("%+dms", Math.round(stageChartOffsetSeconds() * 1000))
-        );
+                        + String.format("%+dms", Math.round(stageChartOffsetSeconds() * 1000));
     }
 
-    private int laneForKey(KeyCode code) {
+    private int laneForKey(int code) {
         return switch (code) {
-            case LEFT, A -> 0;
-            case UP, U -> 1;
-            case DOWN, N -> 2;
-            case RIGHT, D -> 3;
+            case KeyEvent.VK_LEFT -> 0;
+            case KeyEvent.VK_UP -> 1;
+            case KeyEvent.VK_DOWN -> 2;
+            case KeyEvent.VK_RIGHT -> 3;
             default -> -1;
         };
     }
@@ -860,11 +738,12 @@ public class RhythmGameScreen {
         stopMusic();
 
         if (isFullCombo()) {
-            GameplayFeedback.showStageBanner(milestoneText, "FULL COMBO", Color.GOLD);
+            showStageBanner("FULL COMBO", new Color(255, 215, 0));
 
-            PauseTransition delay = new PauseTransition(Duration.millis(900));
-            delay.setOnFinished(e -> controller.showStageResultStory(playableStage, scoreTracker));
-            delay.play();
+            Timer delay = new Timer(900, e -> controller.showStageResultStory(playableStage, scoreTracker));
+            delay.setRepeats(false);
+            delay.start();
+            root.repaint();
             return;
         }
 
@@ -879,7 +758,7 @@ public class RhythmGameScreen {
 
     private void showMissFeedbackIfNeeded(ScoreTracker.Judgment judgment) {
         if (judgment == ScoreTracker.Judgment.BAD || judgment == ScoreTracker.Judgment.MISS) {
-            GameplayFeedback.shake(root);
+            shakeStartedAt = System.nanoTime();
         }
     }
 
@@ -895,26 +774,22 @@ public class RhythmGameScreen {
         }
 
         lastBeatIndex = beatIndex;
-        GameplayFeedback.pulseBeat(root, receptors, theme, beatIndex % beatProfile.beatsPerMeasure() == 0);
+        beatPulses.add(new BeatPulse(System.nanoTime(), beatIndex % beatProfile.beatsPerMeasure() == 0));
     }
 
     private void updateDebugOverlay(double audioTime, double currentTime) {
-        if (debugText == null) {
-            return;
-        }
-
         if (beatProfile == null) {
-            debugText.setText(String.format("Audio %.3f | Chart %.3f", audioTime, currentTime));
+            debugText = String.format("Audio %.3f | Chart %.3f", audioTime, currentTime);
             return;
         }
 
         if (currentTime < beatProfile.firstBeatOffset()) {
-            debugText.setText(String.format(
+            debugText = String.format(
                     "Audio %.3f | Chart %.3f | Offset %+dms | waiting for first beat",
                     audioTime,
                     currentTime,
                     Math.round(stageChartOffsetSeconds() * 1000)
-            ));
+            );
             return;
         }
 
@@ -925,7 +800,7 @@ public class RhythmGameScreen {
         int beat = (slot / beatProfile.gridSlotsPerBeat()) + 1;
         int beatSlot = slot % beatProfile.gridSlotsPerBeat();
 
-        debugText.setText(String.format(
+        debugText = String.format(
                 "Audio %.3f | Chart %.3f | M %02d B %d Slot %02d (%d/%d) | Offset %+dms",
                 audioTime,
                 currentTime,
@@ -935,10 +810,10 @@ public class RhythmGameScreen {
                 beatSlot,
                 beatProfile.gridSlotsPerBeat(),
                 Math.round(stageChartOffsetSeconds() * 1000)
-        ));
+        );
     }
 
-    private void recordNoteBonus(Note note, ScoreTracker.Judgment judgment, Group noteGroup) {
+    private void recordNoteBonus(Note note, ScoreTracker.Judgment judgment, NoteVisual noteVisual) {
         if (!note.isGoldNote()) {
             return;
         }
@@ -946,8 +821,8 @@ public class RhythmGameScreen {
         scoreTracker.recordGoldNoteBonus(judgment);
 
         if (judgment != ScoreTracker.Judgment.MISS) {
-            GameplayFeedback.createGoldBurst(root, noteGroup, theme);
-            GameplayFeedback.showStageBanner(milestoneText, "GOLD NOTE", theme.getGoldNoteColor());
+            createGoldBurst(noteVisual);
+            showStageBanner("GOLD NOTE", theme.getGoldNoteColor());
         }
     }
 
@@ -963,5 +838,356 @@ public class RhythmGameScreen {
     private void stopMusic() {
         musicPlayer.stop();
         musicPlayer.dispose();
+    }
+
+    private void createHitBurst(NoteVisual noteVisual, ScoreTracker.Judgment judgment) {
+        hitBursts.add(new HitBurst(
+                System.nanoTime(),
+                noteVisual.centerX(),
+                JudgmentStyle.color(judgment),
+                judgment == ScoreTracker.Judgment.PERFECT,
+                false
+        ));
+    }
+
+    private void createGoldBurst(NoteVisual noteVisual) {
+        hitBursts.add(new HitBurst(System.nanoTime(), noteVisual.centerX(), theme.getGoldNoteColor(), true, true));
+    }
+
+    private void showStageBanner(String text, Color color) {
+        milestoneText = text;
+        milestoneColor = color;
+        milestoneStartedAt = System.nanoTime();
+    }
+
+    private void pulseCombo(int combo) {
+        if (combo > 1) {
+            comboPulseStartedAt = System.nanoTime();
+        }
+    }
+
+    private void pruneEffects() {
+        long now = System.nanoTime();
+        hitBursts.removeIf(effect -> now - effect.startedAt() > 500_000_000L);
+        beatPulses.removeIf(effect -> now - effect.startedAt() > 380_000_000L);
+    }
+
+    private class GamePanel extends JPanel {
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            paintBackground(g);
+
+            int shakeOffset = currentShakeOffset();
+            g.translate(shakeOffset, 0);
+            drawLaneGuides(g);
+            drawBeatPulses(g);
+            drawActiveNotes(g);
+            drawReceptors(g);
+            drawHitBursts(g);
+            drawHud(g);
+            drawCountdown(g);
+            drawPauseOverlay(g);
+            g.dispose();
+        }
+
+        private void paintBackground(Graphics2D g) {
+            g.setPaint(new GradientPaint(
+                    0,
+                    0,
+                    theme.getBackgroundTop(),
+                    0,
+                    getHeight(),
+                    theme.getBackgroundBottom()
+            ));
+            g.fillRect(0, 0, getWidth(), getHeight());
+        }
+
+        private void drawLaneGuides(Graphics2D g) {
+            double playfieldWidth = PLAYFIELD_RIGHT - PLAYFIELD_LEFT;
+            g.setColor(new Color(255, 255, 255, 20));
+            g.fill(new RoundRectangle2D.Double(PLAYFIELD_LEFT, HIT_Y - 7, playfieldWidth, 14, 16, 16));
+
+            g.setColor(NoteRenderer.withOpacity(theme.getAccentColor(), 0.9));
+            g.setStroke(new BasicStroke(3f));
+            g.drawLine((int) PLAYFIELD_LEFT, (int) HIT_Y, (int) PLAYFIELD_RIGHT, (int) HIT_Y);
+
+            for (int lane = 0; lane < 4; lane++) {
+                double x = LANE_X[lane] + 52;
+                g.setColor(NoteRenderer.withOpacity(theme.laneColor(lane), 0.25));
+                g.setStroke(new BasicStroke(2f));
+                g.drawLine((int) x, 105, (int) x, (int) HIT_Y + 50);
+            }
+        }
+
+        private void drawActiveNotes(Graphics2D g) {
+            for (NoteVisual noteVisual : activeNotes) {
+                Note note = noteVisual.note();
+                NoteRenderer.drawNote(g, noteVisual.x(), noteVisual.y(), note, noteSpeed, theme, keyHeld[note.getLane()]);
+            }
+        }
+
+        private void drawReceptors(Graphics2D g) {
+            for (int lane = 0; lane < 4; lane++) {
+                NoteRenderer.drawReceptor(g, LANE_X[lane] + 52, 525, lane, theme, keyHeld[lane]);
+            }
+        }
+
+        private void drawHud(Graphics2D g) {
+            drawCenteredText(
+                    g,
+                    "Stage " + playableStage.getNumber() + ": " + playableStage.getTitle(),
+                    new Font("Georgia", Font.BOLD, 22),
+                    theme.getAccentColor(),
+                    42
+            );
+
+            drawRightText(
+                    g,
+                    "Score " + scoreTracker.getScore(),
+                    new Font("Arial", Font.BOLD, 15),
+                    NoteRenderer.withOpacity(theme.getSoftTextColor(), 0.72),
+                    970,
+                    42
+            );
+
+            int comboSize = comboPulseSize();
+            g.setFont(new Font("Arial", Font.BOLD, comboSize));
+            g.setColor(scoreTracker.getCombo() >= 25 ? new Color(255, 215, 0) : Color.WHITE);
+            g.drawString("Combo " + scoreTracker.getCombo(), 32, 560);
+
+            drawRightText(
+                    g,
+                    String.format("%.1f%%", scoreTracker.getCurrentAccuracy()),
+                    new Font("Arial", Font.BOLD, 22),
+                    theme.getSoftTextColor(),
+                    968,
+                    560
+            );
+
+            g.setColor(new Color(255, 255, 255, 46));
+            g.fill(new RoundRectangle2D.Double(330, 62, 340, 5, 8, 8));
+
+            double progress = chartEndTime <= 0 ? 0 : Math.max(0, Math.min(currentChartTime / chartEndTime, 1.0));
+            g.setColor(theme.getAccentColor());
+            g.fill(new RoundRectangle2D.Double(330, 62, 340 * progress, 5, 8, 8));
+
+            drawCenteredText(
+                    g,
+                    formatTime(currentChartTime) + " / " + formatTime(chartEndTime),
+                    new Font("Arial", Font.BOLD, 12),
+                    NoteRenderer.withOpacity(theme.getSoftTextColor(), 0.78),
+                    85
+            );
+
+            if (debugVisible) {
+                g.setFont(new Font("Arial", Font.BOLD, 14));
+                g.setColor(NoteRenderer.withOpacity(theme.getSoftTextColor(), 0.78));
+                g.drawString(debugText, 30, 585);
+            }
+
+            drawTimedCenterText(
+                    g,
+                    judgmentText,
+                    judgmentColor,
+                    new Font("Arial", Font.BOLD, 46),
+                    judgmentStartedAt,
+                    GameplayFeedback.JUDGMENT_FADE_MILLIS,
+                    315
+            );
+            drawTimedCenterText(
+                    g,
+                    milestoneText,
+                    milestoneColor,
+                    new Font("Georgia", Font.BOLD, 36),
+                    milestoneStartedAt,
+                    GameplayFeedback.STAGE_BANNER_MILLIS,
+                    210
+            );
+        }
+
+        private void drawCountdown(Graphics2D g) {
+            if (!countdownVisible) {
+                return;
+            }
+
+            drawCenteredText(
+                    g,
+                    countdownText,
+                    new Font("Georgia", Font.BOLD, 82),
+                    new Color(218, 165, 32),
+                    310
+            );
+        }
+
+        private void drawPauseOverlay(Graphics2D g) {
+            if (!paused) {
+                return;
+            }
+
+            g.setColor(new Color(0, 0, 0, 210));
+            g.fillRect(-currentShakeOffset(), 0, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
+
+            drawCenteredText(
+                    g,
+                    "PAUSED",
+                    new Font("Georgia", Font.BOLD, 48),
+                    new Color(218, 165, 32),
+                    195
+            );
+
+            g.setFont(new Font("Arial", Font.BOLD, 18));
+            g.setColor(Color.LIGHT_GRAY);
+            String[] lines = pauseStatsText.split("\\n");
+            int y = 240;
+            for (String line : lines) {
+                drawCenteredText(g, line, g.getFont(), Color.LIGHT_GRAY, y);
+                y += 26;
+            }
+        }
+
+        private void drawHitBursts(Graphics2D g) {
+            long now = System.nanoTime();
+
+            for (HitBurst burst : hitBursts) {
+                double age = (now - burst.startedAt()) / 1_000_000_000.0;
+                double duration = burst.gold() ? 0.46 : 0.26;
+                double t = Math.min(1, age / duration);
+                double alpha = 1.0 - t;
+                double radius = burst.gold() ? 28 + 78 * t : (burst.perfect() ? 22 : 18) + 58 * t;
+
+                if (!burst.gold()) {
+                    g.setColor(NoteRenderer.withOpacity(burst.color(), burst.perfect() ? 0.34 * alpha : 0.22 * alpha));
+                    g.fill(new RoundRectangle2D.Double(burst.x() - 46 - 35 * t, 496, 92 + 70 * t, 8, 14, 14));
+                }
+
+                g.setColor(NoteRenderer.withOpacity(burst.color(), alpha));
+                g.setStroke(new BasicStroke(burst.perfect() ? 4f : 3f));
+                g.draw(new Ellipse2D.Double(burst.x() - radius, 500 - radius * 0.35, radius * 2, radius * 0.7));
+
+                if (burst.perfect() && !burst.gold()) {
+                    g.setColor(NoteRenderer.withOpacity(Color.WHITE, 0.8 * alpha));
+                    g.setStroke(new BasicStroke(2f));
+                    double perfectRadius = 10 + 42 * t;
+                    g.draw(new Ellipse2D.Double(
+                            burst.x() - perfectRadius,
+                            500 - perfectRadius * 0.45,
+                            perfectRadius * 2,
+                            perfectRadius * 0.9
+                    ));
+                }
+            }
+        }
+
+        private void drawBeatPulses(Graphics2D g) {
+            long now = System.nanoTime();
+
+            for (BeatPulse pulse : beatPulses) {
+                double duration = pulse.measureStart() ? 0.36 : 0.25;
+                double t = Math.min(1, ((now - pulse.startedAt()) / 1_000_000_000.0) / duration);
+                double alpha = (pulse.measureStart() ? 0.48 : 0.28) * (1.0 - t);
+                double radius = (pulse.measureStart() ? 42 : 24) * (1.0 + (pulse.measureStart() ? 6.8 : 4.2) * t);
+
+                g.setColor(NoteRenderer.withOpacity(theme.getPulseColor(), alpha));
+                g.setStroke(new BasicStroke(pulse.measureStart() ? 3f : 2f));
+                g.draw(new Ellipse2D.Double(500 - radius, 500 - radius * 0.3, radius * 2, radius * 0.6));
+            }
+        }
+
+        private int comboPulseSize() {
+            long elapsed = System.nanoTime() - comboPulseStartedAt;
+            if (elapsed < 0 || elapsed > COMBO_PULSE_NANOS) {
+                return 22;
+            }
+
+            double t = 1.0 - (elapsed / (double) COMBO_PULSE_NANOS);
+            return (int) Math.round(22 + (4 * t));
+        }
+
+        private int currentShakeOffset() {
+            long elapsed = System.nanoTime() - shakeStartedAt;
+            if (elapsed < 0 || elapsed > SHAKE_NANOS) {
+                return 0;
+            }
+
+            int frame = (int) (elapsed / 20_000_000L);
+            return frame % 2 == 0 ? -5 : 5;
+        }
+
+        private void drawTimedCenterText(
+                Graphics2D g,
+                String text,
+                Color color,
+                Font font,
+                long startedAt,
+                int durationMillis,
+                int y
+        ) {
+            if (text == null || text.isBlank() || startedAt == 0) {
+                return;
+            }
+
+            double ageMillis = (System.nanoTime() - startedAt) / 1_000_000.0;
+            if (ageMillis > durationMillis) {
+                return;
+            }
+
+            double alpha = Math.max(0.15, 1.0 - (ageMillis / durationMillis));
+            drawCenteredText(g, text, font, NoteRenderer.withOpacity(color, alpha), y);
+        }
+
+        private void drawCenteredText(Graphics2D g, String text, Font font, Color color, int baselineY) {
+            g.setFont(font);
+            g.setColor(color);
+            FontMetrics metrics = g.getFontMetrics();
+            int x = (GameConfig.SCENE_WIDTH - metrics.stringWidth(text)) / 2;
+            g.drawString(text, x, baselineY);
+        }
+
+        private void drawRightText(Graphics2D g, String text, Font font, Color color, int rightX, int baselineY) {
+            g.setFont(font);
+            g.setColor(color);
+            FontMetrics metrics = g.getFontMetrics();
+            g.drawString(text, rightX - metrics.stringWidth(text), baselineY);
+        }
+    }
+
+    private record HitBurst(long startedAt, double x, Color color, boolean perfect, boolean gold) {
+    }
+
+    private record BeatPulse(long startedAt, boolean measureStart) {
+    }
+
+    private static final class NoteVisual {
+        private final Note note;
+        private final double x;
+        private double y;
+
+        private NoteVisual(Note note, double x, double y) {
+            this.note = note;
+            this.x = x;
+            this.y = y;
+        }
+
+        private Note note() {
+            return note;
+        }
+
+        private double x() {
+            return x;
+        }
+
+        private double y() {
+            return y;
+        }
+
+        private void setY(double y) {
+            this.y = y;
+        }
+
+        private double centerX() {
+            return x + 52;
+        }
     }
 }

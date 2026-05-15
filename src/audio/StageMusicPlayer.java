@@ -1,93 +1,79 @@
 package audio;
 
+import config.AssetCatalog;
 import model.Stages.PlayableStage;
-import model.Stages.WaveStage;
 
-import javafx.scene.media.Media;
-import javafx.scene.media.MediaPlayer;
-import javafx.util.Duration;
-
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 public class StageMusicPlayer {
-    private final MediaPlayer mediaPlayer;
+    private final Clip clip;
+    private long pausedMicroseconds;
 
     public StageMusicPlayer(PlayableStage stage) {
-        String musicUri = musicUriFor(stage);
-        this.mediaPlayer = musicUri == null ? null : createPlayer(musicUri);
+        URL musicUrl = AssetCatalog.musicUrlFor(stage);
+        this.clip = musicUrl == null ? null : createClip(musicUrl);
     }
 
     public void playFromStart() {
-        if (mediaPlayer == null) {
+        if (clip == null) {
             return;
         }
 
-        mediaPlayer.seek(Duration.ZERO);
-        mediaPlayer.play();
+        clip.stop();
+        clip.setMicrosecondPosition(0);
+        pausedMicroseconds = 0;
+        clip.start();
     }
 
     public boolean hasMusic() {
-        return mediaPlayer != null;
+        return clip != null;
     }
 
     public double currentTimeSeconds() {
-        if (mediaPlayer == null) {
+        if (clip == null) {
             return 0;
         }
 
-        return mediaPlayer.getCurrentTime().toSeconds();
+        return clip.getMicrosecondPosition() / 1_000_000.0;
     }
 
     public void pause() {
-        if (mediaPlayer != null) {
-            mediaPlayer.pause();
+        if (clip != null) {
+            pausedMicroseconds = clip.getMicrosecondPosition();
+            clip.stop();
         }
     }
 
     public void resume() {
-        if (mediaPlayer != null) {
-            mediaPlayer.play();
+        if (clip != null) {
+            clip.setMicrosecondPosition(pausedMicroseconds);
+            clip.start();
         }
     }
 
     public void stop() {
-        if (mediaPlayer != null) {
-            mediaPlayer.stop();
+        if (clip != null) {
+            clip.stop();
+            clip.setMicrosecondPosition(0);
         }
     }
 
     public void dispose() {
-        if (mediaPlayer != null) {
-            mediaPlayer.dispose();
+        if (clip != null) {
+            clip.close();
         }
     }
 
-    private MediaPlayer createPlayer(String musicUri) {
-        MediaPlayer player = new MediaPlayer(new Media(musicUri));
-        player.setVolume(0.75);
-        return player;
-    }
-
-    private String musicUriFor(PlayableStage stage) {
-        if (stage == WaveStage.DRIFT) {
-            return assetUri("assets/rhythms/WavesSample.wav", Path.of("src", "assets", "rhythms", "WavesSample.wav"));
+    private Clip createClip(URL musicUrl) {
+        try (AudioInputStream stream = AudioSystem.getAudioInputStream(musicUrl)) {
+            Clip loadedClip = AudioSystem.getClip();
+            loadedClip.open(stream);
+            return loadedClip;
+        } catch (Exception ignored) {
+            return null;
         }
-
-        if (stage == WaveStage.FIRST_WAVES) {
-            return assetUri("assets/rhythms/WavesSample2.wav", Path.of("src", "assets", "rhythms", "WavesSample2.wav"));
-        }
-
-        return null;
-    }
-
-    private String assetUri(String resourcePath, Path sourcePath) {
-        if (Files.exists(sourcePath)) {
-            return sourcePath.toUri().toString();
-        }
-
-        URL resource = StageMusicPlayer.class.getResource("/" + resourcePath);
-        return resource == null ? null : resource.toExternalForm();
     }
 }

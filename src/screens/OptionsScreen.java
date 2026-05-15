@@ -1,21 +1,19 @@
 package screens;
 
-import config.GameConfig;
 import manager.ScreenManager;
 import settings.GameplaySettings;
 import ui.GameUiFactory;
+import ui.GradientPanel;
 
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Node;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.Font;
 
 public class OptionsScreen {
     private final ScreenManager controller;
@@ -26,19 +24,19 @@ public class OptionsScreen {
         this.options = options;
     }
 
-    public Scene create() {
-        VBox root = new VBox(26);
-        root.setPadding(new Insets(60));
-        root.setAlignment(Pos.TOP_LEFT);
-        root.setStyle("-fx-background-color: #050505;");
+    public JPanel create() {
+        JPanel root = new GradientPanel(new Color(5, 5, 5));
+        root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
+        root.setBorder(BorderFactory.createEmptyBorder(60, 60, 0, 0));
 
-        Text title = new Text("OPTIONS");
-        title.setFill(Color.GOLDENROD);
-        title.setFont(Font.font("Georgia", FontWeight.BOLD, 42));
-
-        Text speedValue = GameUiFactory.createOptionValueText();
-        Text timingValue = GameUiFactory.createOptionValueText();
-        Text offsetValue = GameUiFactory.createOptionValueText();
+        JLabel title = GameUiFactory.createLabel(
+                "OPTIONS",
+                new Color(218, 165, 32),
+                new Font("Georgia", Font.BOLD, 42)
+        );
+        JLabel speedValue = GameUiFactory.createOptionValueLabel();
+        JLabel timingValue = GameUiFactory.createOptionValueLabel();
+        JLabel offsetValue = GameUiFactory.createOptionValueLabel();
 
         Runnable refresh = () -> {
             speedValue.setText(String.format("Note Speed: %.1fx", options.getNoteSpeedMultiplier()));
@@ -46,71 +44,86 @@ public class OptionsScreen {
             offsetValue.setText(String.format("Input Offset: %+d ms", Math.round(options.getInputOffsetSeconds() * 1000)));
         };
 
-        Button speedDown = GameUiFactory.createSmallButton("-");
-        Button speedUp = GameUiFactory.createSmallButton("+");
-        speedDown.setOnAction(e -> {
+        JButton speedDown = GameUiFactory.createSmallButton("-");
+        JButton speedUp = GameUiFactory.createSmallButton("+");
+        speedDown.addActionListener(e -> {
             options.decreaseNoteSpeed();
             refresh.run();
         });
-        speedUp.setOnAction(e -> {
+        speedUp.addActionListener(e -> {
             options.increaseNoteSpeed();
             refresh.run();
         });
 
-        Button strictButton = GameUiFactory.createSmallButton("STRICT");
-        Button normalButton = GameUiFactory.createSmallButton("NORMAL");
-        Button relaxedButton = GameUiFactory.createSmallButton("RELAXED");
-        strictButton.setOnAction(e -> {
+        JButton strictButton = GameUiFactory.createSmallButton("STRICT");
+        JButton normalButton = GameUiFactory.createSmallButton("NORMAL");
+        JButton relaxedButton = GameUiFactory.createSmallButton("RELAXED");
+        strictButton.addActionListener(e -> {
             options.useStrictTiming();
             refresh.run();
         });
-        normalButton.setOnAction(e -> {
+        normalButton.addActionListener(e -> {
             options.useNormalTiming();
             refresh.run();
         });
-        relaxedButton.setOnAction(e -> {
+        relaxedButton.addActionListener(e -> {
             options.useRelaxedTiming();
             refresh.run();
         });
 
-        Button offsetDown = GameUiFactory.createSmallButton("-10");
-        Button offsetReset = GameUiFactory.createSmallButton("RESET");
-        Button offsetUp = GameUiFactory.createSmallButton("+10");
-        offsetDown.setOnAction(e -> {
+        JButton offsetDown = GameUiFactory.createSmallButton("-10");
+        JButton offsetReset = GameUiFactory.createSmallButton("RESET");
+        JButton offsetUp = GameUiFactory.createSmallButton("+10");
+        offsetDown.addActionListener(e -> {
             options.adjustInputOffsetMillis(-10);
             refresh.run();
         });
-        offsetReset.setOnAction(e -> {
+        offsetReset.addActionListener(e -> {
             options.resetInputOffset();
             refresh.run();
         });
-        offsetUp.setOnAction(e -> {
+        offsetUp.addActionListener(e -> {
             options.adjustInputOffsetMillis(10);
             refresh.run();
         });
 
-        Button backButton = GameUiFactory.createSmallButton("BACK");
-        backButton.setOnAction(e -> controller.showMainMenu());
+        JButton backButton = GameUiFactory.createSmallButton("BACK");
+        backButton.addActionListener(e -> controller.showMainMenu());
 
         refresh.run();
 
-        root.getChildren().addAll(
-                title,
-                speedValue,
-                new HBox(14, speedDown, speedUp),
-                timingValue,
-                new HBox(14, strictButton, normalButton, relaxedButton),
-                offsetValue,
-                new HBox(14, offsetDown, offsetReset, offsetUp),
-                backButton
-        );
+        addLeft(root, title);
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, speedValue);
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, row(speedDown, speedUp));
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, timingValue);
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, row(strictButton, normalButton, relaxedButton));
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, offsetValue);
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, row(offsetDown, offsetReset, offsetUp));
+        root.add(Box.createVerticalStrut(26));
+        addLeft(root, backButton);
 
-        for (Node node : root.getChildren()) {
-            if (node instanceof HBox row) {
-                row.setAlignment(Pos.CENTER_LEFT);
-            }
+        return root;
+    }
+
+    private JPanel row(JButton... buttons) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 0));
+        row.setOpaque(false);
+
+        for (JButton button : buttons) {
+            row.add(button);
         }
 
-        return new Scene(root, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
+        return row;
+    }
+
+    private void addLeft(JPanel panel, javax.swing.JComponent component) {
+        component.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        panel.add(component);
     }
 }
