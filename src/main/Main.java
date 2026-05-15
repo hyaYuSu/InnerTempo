@@ -2,22 +2,21 @@ package main;
 
 import manager.ScreenManager;
 
-import javafx.application.Application;
-import javafx.stage.Stage;
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 
-public class Main extends Application {
-    @Override
-    public void start(Stage stage) {
-        ScreenManager screenManager = new ScreenManager(stage);
-
-        stage.setTitle("Inner Tempo");
-        stage.setResizable(false);
-        stage.setOpacity(1);
-        screenManager.showTitle();
-        stage.show();
-    }
-
+public class Main {
     public static void main(String[] args) {
-        launch(args);
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("Inner Tempo");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setResizable(false);
+
+            ScreenManager screenManager = new ScreenManager(frame);
+            screenManager.showTitle();
+
+            frame.setLocationRelativeTo(null);
+            frame.setVisible(true);
+        });
     }
 }

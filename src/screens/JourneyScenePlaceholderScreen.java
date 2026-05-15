@@ -1,21 +1,21 @@
 package screens;
 
-import config.GameConfig;
 import manager.ScreenManager;
 import model.Journey;
 import model.JourneyScene;
 import ui.GameUiFactory;
+import ui.GradientPanel;
 
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
 
 public class JourneyScenePlaceholderScreen {
     private final ScreenManager controller;
@@ -28,48 +28,77 @@ public class JourneyScenePlaceholderScreen {
         this.scene = scene;
     }
 
-    public Scene create() {
-        BorderPane root = new BorderPane();
-        root.setStyle(backgroundStyle());
+    public JPanel create() {
+        JPanel root = new GradientPanel(backgroundTop(), backgroundBottom());
+        root.setLayout(new BorderLayout());
 
-        VBox content = new VBox(22);
-        content.setPadding(new Insets(60));
-        content.setAlignment(Pos.TOP_LEFT);
+        JPanel content = new JPanel();
+        content.setOpaque(false);
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(BorderFactory.createEmptyBorder(60, 60, 60, 60));
 
-        Text journeyTitle = new Text(journey.getTitle());
-        journeyTitle.setFill(Color.GOLDENROD);
-        journeyTitle.setFont(Font.font("Georgia", FontWeight.BOLD, 42));
+        JLabel journeyTitle = GameUiFactory.createLabel(
+                journey.getTitle(),
+                new Color(218, 165, 32),
+                new Font("Georgia", Font.BOLD, 42)
+        );
+        JLabel sceneTitle = GameUiFactory.createLabel(
+                "Scene " + scene.getNumber() + ": " + scene.getTitle(),
+                Color.WHITE,
+                new Font("Georgia", Font.BOLD, 30)
+        );
+        JTextArea background = GameUiFactory.createWrappedText(
+                journey.getBackgroundLabel(),
+                Color.LIGHT_GRAY,
+                new Font("Georgia", Font.PLAIN, 20),
+                760
+        );
+        JTextArea story = GameUiFactory.createWrappedText(
+                scene.getStoryText().isBlank() ? scene.getSummary() : scene.getStoryText(),
+                Color.WHITE,
+                new Font("Georgia", Font.PLAIN, 19),
+                780
+        );
 
-        Text sceneTitle = new Text("Scene " + scene.getNumber() + ": " + scene.getTitle());
-        sceneTitle.setFill(Color.WHITE);
-        sceneTitle.setFont(Font.font("Georgia", FontWeight.BOLD, 30));
+        JButton backButton = GameUiFactory.createSmallButton("BACK");
+        backButton.addActionListener(e -> controller.showJourneySelect(journey.getId()));
 
-        Text background = new Text(journey.getBackgroundLabel());
-        background.setFill(Color.LIGHTGRAY);
-        background.setFont(Font.font("Georgia", 20));
-        background.setWrappingWidth(760);
+        addLeft(content, journeyTitle);
+        content.add(Box.createVerticalStrut(22));
+        addLeft(content, sceneTitle);
+        content.add(Box.createVerticalStrut(22));
+        addLeft(content, background);
+        content.add(Box.createVerticalStrut(22));
+        addLeft(content, story);
+        content.add(Box.createVerticalStrut(22));
+        addLeft(content, backButton);
 
-        Text story = new Text(scene.getStoryText().isBlank() ? scene.getSummary() : scene.getStoryText());
-        story.setFill(Color.WHITE);
-        story.setFont(Font.font("Georgia", 19));
-        story.setWrappingWidth(780);
-
-        Button backButton = GameUiFactory.createSmallButton("BACK");
-        backButton.setOnAction(e -> controller.showJourneySelect(journey.getId()));
-
-        content.getChildren().addAll(journeyTitle, sceneTitle, background, story, backButton);
-        root.setCenter(content);
-
-        return new Scene(root, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
+        root.add(content, BorderLayout.CENTER);
+        return root;
     }
 
-    private String backgroundStyle() {
+    private Color backgroundTop() {
         return switch (scene.getNumber()) {
-            case 1 -> "-fx-background-color: linear-gradient(to bottom, #4b3527, #120d0a);";
-            case 2 -> "-fx-background-color: linear-gradient(to bottom, #2b2526, #080707);";
-            case 3 -> "-fx-background-color: linear-gradient(to bottom, #253548, #090d12);";
-            case 4 -> "-fx-background-color: linear-gradient(to bottom, #463820, #0f0b08);";
-            default -> "-fx-background-color: linear-gradient(to bottom, #5d3a2f, #1b1015);";
+            case 1 -> new Color(75, 53, 39);
+            case 2 -> new Color(43, 37, 38);
+            case 3 -> new Color(37, 53, 72);
+            case 4 -> new Color(70, 56, 32);
+            default -> new Color(93, 58, 47);
         };
+    }
+
+    private Color backgroundBottom() {
+        return switch (scene.getNumber()) {
+            case 1 -> new Color(18, 13, 10);
+            case 2 -> new Color(8, 7, 7);
+            case 3 -> new Color(9, 13, 18);
+            case 4 -> new Color(15, 11, 8);
+            default -> new Color(27, 16, 21);
+        };
+    }
+
+    private void addLeft(JPanel panel, javax.swing.JComponent component) {
+        component.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        panel.add(component);
     }
 }

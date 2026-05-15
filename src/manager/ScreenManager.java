@@ -1,5 +1,6 @@
 package manager;
 
+import config.GameConfig;
 import gameplay.RandomChartGenerator;
 import model.Journey;
 import model.JourneyId;
@@ -9,27 +10,30 @@ import score.ScoreTracker;
 import screens.*;
 import settings.GameplaySettings;
 
-import javafx.stage.Stage;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import java.awt.Dimension;
 
 public class ScreenManager {
-    private final Stage stage;
+    private final JFrame frame;
     private final GameplaySettings options;
     private final SaveManager saveManager;
     private final RandomChartGenerator chartGenerator;
 
-    public ScreenManager(Stage stage) {
-        this.stage = stage;
+    public ScreenManager(JFrame frame) {
+        this.frame = frame;
         this.options = new GameplaySettings();
         this.saveManager = new SaveManager();
         this.chartGenerator = new RandomChartGenerator();
     }
 
     public void showTitle() {
-        stage.setScene(new TitleScreen(this).create());
+        setScreen(new TitleScreen(this).create());
     }
 
     public void showMainMenu() {
-        stage.setScene(new MainMenuScreen(this).create());
+        setScreen(new MainMenuScreen(this).create());
     }
 
     public void showJourneySelect() {
@@ -37,30 +41,39 @@ public class ScreenManager {
     }
 
     public void showJourneySelect(JourneyId selectedJourney) {
-        stage.setScene(new JourneySelectScreen(this, saveManager, selectedJourney).create());
+        setScreen(new JourneySelectScreen(this, saveManager, selectedJourney).create());
     }
 
     public void showJourneyScene(Journey journey, JourneyScene scene) {
-        stage.setScene(new JourneyScenePlaceholderScreen(this, journey, scene).create());
+        setScreen(new JourneyScenePlaceholderScreen(this, journey, scene).create());
     }
 
     public void showOptions() {
-        stage.setScene(new OptionsScreen(this, options).create());
+        setScreen(new OptionsScreen(this, options).create());
     }
 
     public void startStage(PlayableStage playableStage) {
-        stage.setScene(new RhythmGameScreen(this, options, chartGenerator, playableStage).create());
+        setScreen(new RhythmGameScreen(this, options, chartGenerator, playableStage).create());
     }
 
     public void showLore(PlayableStage playableStage) {
-        stage.setScene(new LoreScreen(this, playableStage).create());
+        setScreen(new LoreScreen(this, playableStage).create());
     }
 
     public void showResults(PlayableStage playableStage, ScoreTracker scoreTracker) {
-        stage.setScene(new ResultsScreen(this, saveManager, playableStage, scoreTracker).create());
+        setScreen(new ResultsScreen(this, saveManager, playableStage, scoreTracker).create());
     }
 
     public void showStageResultStory(PlayableStage playableStage, ScoreTracker scoreTracker) {
-        stage.setScene(new StageResultStoryScreen(this, playableStage, scoreTracker).create());
+        setScreen(new StageResultStoryScreen(this, playableStage, scoreTracker).create());
+    }
+
+    private void setScreen(JPanel screen) {
+        screen.setPreferredSize(new Dimension(GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT));
+        frame.setContentPane(screen);
+        frame.pack();
+        frame.revalidate();
+        frame.repaint();
+        SwingUtilities.invokeLater(screen::requestFocusInWindow);
     }
 }

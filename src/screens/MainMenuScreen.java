@@ -1,18 +1,20 @@
 package screens;
 
-import config.GameConfig;
+import config.AssetCatalog;
 import manager.ScreenManager;
 import ui.GameUiFactory;
+import ui.WarmCinematicImagePanel;
 
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.ImageIcon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import java.awt.Color;
+import java.awt.Font;
+import java.net.URL;
 
 public class MainMenuScreen {
     private final ScreenManager controller;
@@ -21,24 +23,40 @@ public class MainMenuScreen {
         this.controller = controller;
     }
 
-    public Scene create() {
-        VBox root = new VBox(25);
-        root.setPadding(new Insets(60));
-        root.setAlignment(Pos.TOP_LEFT);
-        root.setStyle("-fx-background-color: #050505;");
+    public JPanel create() {
+        JPanel root = new WarmCinematicImagePanel(loadMenuAsset());
+        root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
+        root.setBorder(BorderFactory.createEmptyBorder(60, 60, 0, 0));
 
-        Text title = new Text("InnerTempo");
-        title.setFill(Color.GOLDENROD);
-        title.setFont(Font.font("Georgia", FontWeight.BOLD, 42));
+        JLabel title = new JLabel("Inner Tempo");
+        title.setForeground(new Color(74, 52, 34));
+        title.setFont(new Font("Georgia", Font.BOLD, 42));
+        title.setAlignmentX(JLabel.LEFT_ALIGNMENT);
 
-        Button playButton = GameUiFactory.createMenuButton("PLAY");
-        Button optionsButton = GameUiFactory.createMenuButton("OPTIONS");
+        JButton playButton = GameUiFactory.createMenuButton("PLAY");
+        JButton optionsButton = GameUiFactory.createMenuButton("OPTIONS");
+        playButton.setAlignmentX(JButton.LEFT_ALIGNMENT);
+        optionsButton.setAlignmentX(JButton.LEFT_ALIGNMENT);
 
-        playButton.setOnAction(e -> controller.showJourneySelect());
-        optionsButton.setOnAction(e -> controller.showOptions());
+        playButton.addActionListener(e -> controller.showJourneySelect());
+        optionsButton.addActionListener(e -> controller.showOptions());
 
-        root.getChildren().addAll(title, playButton, optionsButton);
+        root.add(title);
+        root.add(Box.createVerticalStrut(25));
+        root.add(playButton);
+        root.add(Box.createVerticalStrut(25));
+        root.add(optionsButton);
 
-        return new Scene(root, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
+        return root;
+    }
+
+    private ImageIcon loadMenuAsset() {
+        URL imageUrl = AssetCatalog.titleScreenUrl();
+        if (imageUrl == null) {
+            return null;
+        }
+
+        ImageIcon icon = new ImageIcon(imageUrl);
+        return icon.getIconWidth() > 0 ? icon : null;
     }
 }

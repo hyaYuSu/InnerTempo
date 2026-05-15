@@ -27,15 +27,16 @@ public final class JourneyCatalog {
         return new Journey(
                 JourneyId.WAVES,
                 "Waves",
-                "Ride what comes.",
-                "A quiet ocean journey about learning to meet life the way waves arrive: one uncertain swell at a time.",
-                "Ocean Background GIF",
+                "One breath. One pull. One release.",
+                "A dark ocean journey about keeping rhythm when direction disappears.",
+                "Dark Ocean Background",
                 List.of(
-                        waveScene(WaveStage.DRIFT, "A board, a quiet shore, and the first wave that asks for courage."),
-                        waveScene(WaveStage.FIRST_WAVES, "Small waves teach the body how to try again."),
-                        waveScene(WaveStage.STRUGGLE, "Falling becomes part of learning how to continue."),
-                        waveScene(WaveStage.STORM, "The water grows loud, and fear has to ride along."),
-                        waveScene(WaveStage.BEYOND_THE_ISLAND, "The wave is no longer an enemy. It is a way forward.")
+                        waveScene(WaveStage.DRIFT),
+                        waveScene(WaveStage.FIRST_WAVES),
+                        waveScene(WaveStage.STRUGGLE),
+                        waveScene(WaveStage.STORM),
+                        waveScene(WaveStage.BEYOND_THE_ISLAND),
+                        waveScene(WaveStage.ONE_PULL_ONE_RELEASE)
                 )
         );
     }
@@ -119,12 +120,12 @@ public final class JourneyCatalog {
         );
     }
 
-    private static JourneyScene waveScene(WaveStage stage, String summary) {
+    private static JourneyScene waveScene(WaveStage stage) {
         return new JourneyScene(
                 stage.getNumber(),
                 stage.getTitle(),
-                summary,
-                "",
+                WavesStoryCatalog.summaryFor(stage),
+                WavesStoryCatalog.storyFor(stage),
                 "Clear Scene " + (stage.getNumber() - 1) + " with 70% accuracy.",
                 stage.getNumber() == 1,
                 stage

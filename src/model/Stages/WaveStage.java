@@ -3,11 +3,12 @@ package model.Stages;
 import model.JourneyId;
 
 public enum WaveStage implements PlayableStage {
-    DRIFT(1, "Drift"),
-    FIRST_WAVES(2, "First Waves"),
-    STRUGGLE(3, "Struggle"),
-    STORM(4, "Storm"),
-    BEYOND_THE_ISLAND(5, "Beyond the Island");
+    DRIFT(1, "Adrift"),
+    FIRST_WAVES(2, "Small Waves"),
+    STRUGGLE(3, "Rough Water"),
+    STORM(4, "Steady Rhythm"),
+    BEYOND_THE_ISLAND(5, "Path of Light"),
+    ONE_PULL_ONE_RELEASE(6, "One Pull, One Release");
 
     private final int number;
     private final String title;
