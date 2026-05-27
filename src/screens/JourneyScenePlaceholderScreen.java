@@ -1,10 +1,11 @@
 package screens;
 
+import config.AssetCatalog;
 import manager.ScreenManager;
 import model.Journey;
 import model.JourneyScene;
+import ui.AnimatedGifBackground;
 import ui.GameUiFactory;
-import ui.GradientPanel;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -13,9 +14,15 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
+import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 
 public class JourneyScenePlaceholderScreen {
     private final ScreenManager controller;
@@ -29,7 +36,11 @@ public class JourneyScenePlaceholderScreen {
     }
 
     public JPanel create() {
-        JPanel root = new GradientPanel(backgroundTop(), backgroundBottom());
+        JPanel root = new SceneImageBackgroundPanel(
+                backgroundTop(),
+                backgroundBottom(),
+                AnimatedGifBackground.load(AssetCatalog.backgroundUrlFor(scene.getPlayableStage()))
+        );
         root.setLayout(new BorderLayout());
 
         JPanel content = new JPanel();
@@ -100,5 +111,72 @@ public class JourneyScenePlaceholderScreen {
     private void addLeft(JPanel panel, javax.swing.JComponent component) {
         component.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
         panel.add(component);
+    }
+
+    private static final class SceneImageBackgroundPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+
+        private final Color topColor;
+        private final Color bottomColor;
+        private final AnimatedGifBackground backgroundImage;
+        private final Timer animationTimer;
+
+        private SceneImageBackgroundPanel(
+                Color topColor,
+                Color bottomColor,
+                AnimatedGifBackground backgroundImage
+        ) {
+            this.topColor = topColor;
+            this.bottomColor = bottomColor;
+            this.backgroundImage = backgroundImage;
+            setOpaque(true);
+
+            if (backgroundImage != null && backgroundImage.isAnimated()) {
+                animationTimer = new Timer(33, e -> repaint());
+                animationTimer.start();
+            } else {
+                animationTimer = null;
+            }
+        }
+
+        @Override
+        public void removeNotify() {
+            if (animationTimer != null) {
+                animationTimer.stop();
+            }
+
+            super.removeNotify();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setPaint(new GradientPaint(0, 0, topColor, 0, getHeight(), bottomColor));
+            g.fillRect(0, 0, getWidth(), getHeight());
+
+            BufferedImage frame = backgroundImage == null ? null : backgroundImage.currentFrame();
+            if (frame != null && frame.getWidth() > 0 && frame.getHeight() > 0) {
+                drawCoverImage(g, frame);
+                g.setColor(new Color(0, 0, 0, 132));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setPaint(new GradientPaint(0, 0, new Color(0, 0, 0, 18), 0, getHeight(), new Color(0, 0, 0, 190)));
+                g.fillRect(0, 0, getWidth(), getHeight());
+            }
+
+            g.dispose();
+        }
+
+        private void drawCoverImage(Graphics2D g, BufferedImage frame) {
+            int imageWidth = frame.getWidth();
+            int imageHeight = frame.getHeight();
+            double scale = Math.max(getWidth() / (double) imageWidth, getHeight() / (double) imageHeight);
+            int drawWidth = (int) Math.ceil(imageWidth * scale);
+            int drawHeight = (int) Math.ceil(imageHeight * scale);
+            int x = (getWidth() - drawWidth) / 2;
+            int y = (getHeight() - drawHeight) / 2;
+
+            g.drawImage(frame, x, y, drawWidth, drawHeight, this);
+        }
     }
 }

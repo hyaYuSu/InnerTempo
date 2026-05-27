@@ -26,9 +26,9 @@ public final class JourneyCatalog {
     public static Journey waves() {
         return new Journey(
                 JourneyId.WAVES,
-                "Waves",
-                "One breath. One pull. One release.",
-                "A dark ocean journey about keeping rhythm when direction disappears.",
+                "WAVES",
+                "Finding Direction in the Middle of the Storm",
+                "In a sea with no visible shore, a drifting soul discovers that each breath can become an oar and each movement can become a way forward.",
                 "Dark Ocean Background",
                 List.of(
                         waveScene(WaveStage.DRIFT),
@@ -44,9 +44,9 @@ public final class JourneyCatalog {
     public static Journey stageTwo() {
         return new Journey(
                 JourneyId.GATO,
-                "Little Bell",
-                "A small search for something that used to answer.",
-                "A cat wanders through familiar places looking for a lost toy. Underneath the search is the feeling of missing an old friend.",
+                "LITTLE BELL",
+                "Coming Home Without What Was Lost",
+                "A stray cat learns that the basket may stay empty, but the heart can still find its way home.",
                 "Warm Room Background",
                 List.of(
                         catScene(

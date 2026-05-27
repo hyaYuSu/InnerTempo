@@ -3,6 +3,7 @@ package screens;
 import config.AssetCatalog;
 import manager.ScreenManager;
 import ui.GameUiFactory;
+import ui.MenuCardLayout;
 import ui.WarmCinematicImagePanel;
 
 import javax.swing.BorderFactory;
@@ -28,13 +29,23 @@ public class MainMenuScreen {
         root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
         root.setBorder(BorderFactory.createEmptyBorder(60, 60, 0, 0));
 
-        JLabel title = new JLabel("Inner Tempo");
+        JLabel title = new JLabel("INNER TEMPO");
         title.setForeground(new Color(74, 52, 34));
-        title.setFont(new Font("Georgia", Font.BOLD, 42));
+        title.setFont(new Font("Georgia", Font.BOLD, 58));
         title.setAlignmentX(JLabel.LEFT_ALIGNMENT);
 
-        JButton playButton = GameUiFactory.createMenuButton("PLAY");
-        JButton optionsButton = GameUiFactory.createMenuButton("OPTIONS");
+        JButton playButton = createImageMenuButton(
+                AssetCatalog.playButtonStaticUrl(),
+                AssetCatalog.playButtonHoverUrl(),
+                AssetCatalog.playButtonPressedUrl(),
+                "PLAY"
+        );
+        JButton optionsButton = createImageMenuButton(
+                AssetCatalog.optionsButtonStaticUrl(),
+                AssetCatalog.optionsButtonHoverUrl(),
+                AssetCatalog.optionsButtonPressedUrl(),
+                "OPTIONS"
+        );
         playButton.setAlignmentX(JButton.LEFT_ALIGNMENT);
         optionsButton.setAlignmentX(JButton.LEFT_ALIGNMENT);
 
@@ -42,12 +53,22 @@ public class MainMenuScreen {
         optionsButton.addActionListener(e -> controller.showOptions());
 
         root.add(title);
-        root.add(Box.createVerticalStrut(25));
+        root.add(Box.createVerticalStrut(2));
         root.add(playButton);
-        root.add(Box.createVerticalStrut(25));
+        root.add(Box.createVerticalStrut(0));
         root.add(optionsButton);
 
         return root;
+    }
+
+    private JButton createImageMenuButton(URL staticUrl, URL hoverUrl, URL pressedUrl, String fallbackText) {
+        return GameUiFactory.createImageStateButton(
+                staticUrl,
+                hoverUrl,
+                pressedUrl,
+                fallbackText,
+                MenuCardLayout.MAIN_MENU_BUTTON_WIDTH
+        );
     }
 
     private ImageIcon loadMenuAsset() {

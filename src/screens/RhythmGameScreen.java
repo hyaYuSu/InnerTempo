@@ -1,19 +1,22 @@
 package screens;
 
 import audio.StageMusicPlayer;
+import config.AssetCatalog;
 import config.GameConfig;
 import gameplay.HitJudge;
-import gameplay.RandomChartGenerator;
 import gameplay.StageBeatProfile;
+import gameplay.StageChartGenerator;
 import manager.ScreenManager;
 import model.Note;
 import model.Stages.PlayableStage;
 import score.ScoreTracker;
 import settings.GameplaySettings;
+import ui.AnimatedGifBackground;
 import ui.GameUiFactory;
 import ui.GameplayFeedback;
 import ui.JudgmentStyle;
 import ui.JourneyTheme;
+import ui.MenuCardLayout;
 import ui.NoteRenderer;
 
 import javax.swing.AbstractAction;
@@ -24,6 +27,7 @@ import javax.swing.KeyStroke;
 import javax.swing.Timer;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
@@ -34,9 +38,11 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 
 public class RhythmGameScreen {
     private static final double COUNTDOWN_SECONDS = 3.0;
@@ -48,14 +54,19 @@ public class RhythmGameScreen {
     private static final double[] LANE_X = {238, 378, 518, 658};
     private static final long COMBO_PULSE_NANOS = 140_000_000L;
     private static final long SHAKE_NANOS = 160_000_000L;
+    private static final int END_FADE_MILLIS = 650;
+    private static final int FINISH_HOLD_MILLIS = 650;
+    private static final int RESUME_COUNTDOWN_MILLIS = 2400;
+    private static final int PAUSE_MENU_BUTTON_WIDTH = MenuCardLayout.MAIN_MENU_BUTTON_WIDTH - 8;
 
     private final ScreenManager controller;
     private final GameplaySettings options;
-    private final RandomChartGenerator chartGenerator;
+    private final StageChartGenerator chartGenerator;
     private final PlayableStage playableStage;
     private final HitJudge hitJudge;
     private final JourneyTheme theme;
     private final StageBeatProfile beatProfile;
+    private final AnimatedGifBackground backgroundImage;
 
     private final List<NoteVisual> activeNotes = new ArrayList<>();
     private final List<HitBurst> hitBursts = new ArrayList<>();
@@ -63,22 +74,30 @@ public class RhythmGameScreen {
     private final boolean[] keyHeld = new boolean[4];
 
     private GamePanel root;
-    private JButton backButton;
+    private JButton pauseButton;
     private final List<JButton> pauseButtons = new ArrayList<>();
     private List<Note> noteData;
     private ScoreTracker scoreTracker;
     private StageMusicPlayer musicPlayer;
     private Timer timer;
+    private Timer transitionTimer;
+    private Timer backgroundAnimationTimer;
+    private Timer resumeCountdownTimer;
     private long startTime;
     private long pauseStartedAt;
     private long judgmentStartedAt;
     private long milestoneStartedAt;
     private long comboPulseStartedAt;
     private long shakeStartedAt;
+    private long endFadeStartedAt;
+    private long finishStartedAt;
+    private long resumeCountdownStartedAt;
     private boolean paused;
     private boolean countdownComplete;
     private boolean musicStarted;
     private boolean finished;
+    private boolean endingTransition;
+    private boolean resumeCountdownActive;
     private int lastBeatIndex = -1;
     private double chartEndTime;
     private double noteSpeed;
@@ -91,12 +110,13 @@ public class RhythmGameScreen {
     private Color judgmentColor = Color.WHITE;
     private String milestoneText = "";
     private Color milestoneColor = Color.WHITE;
-    private String pauseStatsText = "";
+    private int[] boundLaneKeyCodes = new int[0];
+    private boolean musicDisposed;
 
     public RhythmGameScreen(
             ScreenManager controller,
             GameplaySettings options,
-            RandomChartGenerator chartGenerator,
+            StageChartGenerator chartGenerator,
             PlayableStage playableStage
     ) {
         this.controller = controller;
@@ -106,6 +126,7 @@ public class RhythmGameScreen {
         this.hitJudge = new HitJudge(options);
         this.theme = JourneyTheme.forStage(playableStage);
         this.beatProfile = StageBeatProfile.forStage(playableStage).orElse(null);
+        this.backgroundImage = loadBackgroundImage(playableStage);
     }
 
     public JPanel create() {
@@ -113,9 +134,9 @@ public class RhythmGameScreen {
         root.setLayout(null);
         root.setFocusable(true);
 
-        noteData = chartGenerator.generateChart(playableStage);
+        musicPlayer = new StageMusicPlayer(playableStage, options.getMusicVolume());
+        noteData = chartGenerator.generateChart(playableStage, musicPlayer.durationSeconds());
         scoreTracker = new ScoreTracker(noteData.size());
-        musicPlayer = new StageMusicPlayer(playableStage);
         chartEndTime = getChartEndTime(noteData) + 0.6;
         noteSpeed = GameConfig.BASE_NOTE_SPEED * options.getNoteSpeedMultiplier() * stageSpeedMultiplier();
         currentChartTime = 0;
@@ -126,68 +147,88 @@ public class RhythmGameScreen {
         startTime = System.nanoTime();
         timer = new Timer(16, e -> tick());
         timer.start();
+        startBackgroundAnimationTimer();
 
         return root;
     }
 
     private void createControls() {
-        backButton = GameUiFactory.createSmallButton("BACK");
-        backButton.setBounds(30, 25, 120, 40);
-        backButton.addActionListener(e -> {
-            timer.stop();
-            stopMusic();
-            controller.showJourneySelect(playableStage.getJourneyId());
-        });
-        root.add(backButton);
+        pauseButton = GameUiFactory.createSmallButton("PAUSE");
+        placeButton(pauseButton, 30, 25);
+        pauseButton.addActionListener(e -> togglePause());
+        root.add(pauseButton);
 
-        JButton resumeButton = GameUiFactory.createSmallButton("RESUME");
-        JButton retryButton = GameUiFactory.createSmallButton("RETRY");
-        JButton playButton = GameUiFactory.createSmallButton("STAGES");
-        JButton optionsButton = GameUiFactory.createSmallButton("OPTIONS");
+        JButton resumeButton = createPauseMenuButton("RESUME", "Rsme");
+        JButton retryButton = createPauseMenuButton("RETRY", "Rtry");
+        JButton scenesButton = createPauseMenuButton("SCENES", "Home");
+        JButton optionsButton = createPauseMenuButton("OPTIONS", "Opt");
 
         resumeButton.addActionListener(e -> resumeGame());
         retryButton.addActionListener(e -> {
-            timer.stop();
-            stopMusic();
-            controller.startStage(playableStage);
+            leaveGameplay(() -> controller.startStage(playableStage));
         });
-        playButton.addActionListener(e -> {
-            timer.stop();
-            stopMusic();
-            controller.showJourneySelect(playableStage.getJourneyId());
+        scenesButton.addActionListener(e -> {
+            leaveGameplay(() -> controller.showJourneySelect(playableStage.getJourneyId()));
         });
         optionsButton.addActionListener(e -> {
-            timer.stop();
-            stopMusic();
-            controller.showOptions();
+            controller.showOptions(() -> {
+                musicPlayer.setVolume(options.getMusicVolume());
+                installKeyBindings(root);
+                controller.restoreScreen(root);
+                root.requestFocusInWindow();
+            });
         });
 
-        int buttonX = (GameConfig.SCENE_WIDTH - 120) / 2;
-        int y = 300;
-        JButton[] buttons = {resumeButton, retryButton, playButton, optionsButton};
+        JButton[] buttons = {resumeButton, retryButton, scenesButton, optionsButton};
+        int y = 238;
         for (JButton button : buttons) {
-            button.setBounds(buttonX, y, 120, 40);
+            Dimension size = button.getPreferredSize();
+            int buttonX = (GameConfig.SCENE_WIDTH - size.width) / 2;
+            button.setBounds(buttonX, y, size.width, size.height);
             button.setVisible(false);
             pauseButtons.add(button);
             root.add(button);
-            y += 56;
+            y += size.height + 7;
         }
     }
 
-    private void installKeyBindings(JComponent component) {
-        bindPress(component, KeyEvent.VK_LEFT);
-        bindPress(component, KeyEvent.VK_UP);
-        bindPress(component, KeyEvent.VK_DOWN);
-        bindPress(component, KeyEvent.VK_RIGHT);
-        bindPress(component, KeyEvent.VK_ESCAPE);
-        bindPress(component, KeyEvent.VK_OPEN_BRACKET);
-        bindPress(component, KeyEvent.VK_CLOSE_BRACKET);
-        bindPress(component, KeyEvent.VK_0);
+    private JButton createPauseMenuButton(String text, String assetId) {
+        return GameUiFactory.createImageStateButton(
+                AssetCatalog.buttonStateUrl(assetId, "S"),
+                AssetCatalog.buttonStateUrl(assetId, "H"),
+                AssetCatalog.buttonStateUrl(assetId, "P"),
+                text,
+                PAUSE_MENU_BUTTON_WIDTH
+        );
+    }
 
-        bindRelease(component, KeyEvent.VK_LEFT);
-        bindRelease(component, KeyEvent.VK_UP);
-        bindRelease(component, KeyEvent.VK_DOWN);
-        bindRelease(component, KeyEvent.VK_RIGHT);
+    private void placeButton(JButton button, int x, int y) {
+        Dimension size = button.getPreferredSize();
+        button.setBounds(x, y, size.width, size.height);
+    }
+
+    private void installKeyBindings(JComponent component) {
+        removeLaneKeyBindings(component);
+
+        int[] laneKeyCodes = options.laneKeyCodes();
+        for (int laneKeyCode : laneKeyCodes) {
+            bindPress(component, laneKeyCode);
+            bindRelease(component, laneKeyCode);
+        }
+        boundLaneKeyCodes = laneKeyCodes;
+
+        bindPress(component, KeyEvent.VK_ESCAPE);
+    }
+
+    private void removeLaneKeyBindings(JComponent component) {
+        for (int laneKeyCode : boundLaneKeyCodes) {
+            component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                    .remove(KeyStroke.getKeyStroke(laneKeyCode, 0, false));
+            component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                    .remove(KeyStroke.getKeyStroke(laneKeyCode, 0, true));
+            component.getActionMap().remove("pressed-" + laneKeyCode);
+            component.getActionMap().remove("released-" + laneKeyCode);
+        }
     }
 
     private void bindPress(JComponent component, int keyCode) {
@@ -221,6 +262,10 @@ public class RhythmGameScreen {
         updateCountdown(rawTime);
 
         if (rawTime < COUNTDOWN_SECONDS) {
+            double previewChartTime = rawTime - COUNTDOWN_SECONDS;
+            currentChartTime = previewChartTime;
+            spawnNotes(noteData, previewChartTime, noteSpeed);
+            updateNotePositions(previewChartTime, noteSpeed);
             root.repaint();
             return;
         }
@@ -228,7 +273,7 @@ public class RhythmGameScreen {
         countdownComplete = true;
         startMusicIfNeeded();
         double audioTime = gameplaySeconds();
-        double currentTime = chartSeconds(audioTime);
+        double currentTime = audioTime;
         currentChartTime = currentTime;
 
         updateBeatPulse(audioTime);
@@ -236,7 +281,7 @@ public class RhythmGameScreen {
         spawnNotes(noteData, currentTime, noteSpeed);
         updateActiveNotes(currentTime, noteSpeed);
 
-        if (!finished && currentTime >= chartEndTime) {
+        if (!finished && shouldFinishStage(currentTime)) {
             finished = true;
             timer.stop();
             finishStage();
@@ -279,7 +324,7 @@ public class RhythmGameScreen {
             NoteVisual noteVisual = iterator.next();
             Note note = noteVisual.note();
 
-            noteVisual.setY(HIT_Y - ((note.getTime() - currentTime) * pixelsPerSecond));
+            updateNotePosition(noteVisual, currentTime, pixelsPerSecond);
 
             if (note.isHolding() && updateHeldNote(noteVisual, note, currentTime, iterator)) {
                 continue;
@@ -289,6 +334,17 @@ public class RhythmGameScreen {
                 recordAndRemove(noteVisual, iterator, ScoreTracker.Judgment.MISS, "MISS", false, null);
             }
         }
+    }
+
+    private void updateNotePositions(double currentTime, double pixelsPerSecond) {
+        for (NoteVisual noteVisual : activeNotes) {
+            updateNotePosition(noteVisual, currentTime, pixelsPerSecond);
+        }
+    }
+
+    private void updateNotePosition(NoteVisual noteVisual, double currentTime, double pixelsPerSecond) {
+        Note note = noteVisual.note();
+        noteVisual.setY(HIT_Y - ((note.getTime() - currentTime) * pixelsPerSecond));
     }
 
     private boolean updateHeldNote(
@@ -309,7 +365,7 @@ public class RhythmGameScreen {
             ScoreTracker.Judgment judgment = finishHold(
                     note,
                     note.getReleasedAt(),
-                    note.getReleasedAt() + options.getInputOffsetSeconds(),
+                    note.getReleasedAt(),
                     false
             );
             recordAndRemove(noteVisual, iterator, judgment, "DROPPED", true, null);
@@ -340,10 +396,6 @@ public class RhythmGameScreen {
     }
 
     private void handleKeyPressed(int code) {
-        if (handleCalibrationKey(code)) {
-            return;
-        }
-
         if (code == KeyEvent.VK_ESCAPE) {
             togglePause();
             return;
@@ -365,7 +417,7 @@ public class RhythmGameScreen {
             return;
         }
 
-        checkArrowHit(lane, chartSeconds());
+        checkArrowHit(lane, gameplaySeconds());
         root.repaint();
     }
 
@@ -381,12 +433,12 @@ public class RhythmGameScreen {
         }
 
         keyHeld[lane] = false;
-        releaseHeldNote(lane, chartSeconds());
+        releaseHeldNote(lane, gameplaySeconds());
         root.repaint();
     }
 
     private void checkArrowHit(int lane, double currentTime) {
-        double adjustedTime = currentTime + options.getInputOffsetSeconds();
+        double adjustedTime = currentTime;
         NoteVisual closestNote = null;
         double closestDelta = Double.MAX_VALUE;
         double closestSignedDelta = 0;
@@ -440,7 +492,7 @@ public class RhythmGameScreen {
     }
 
     private void releaseHeldNote(int lane, double currentTime) {
-        double adjustedTime = currentTime + options.getInputOffsetSeconds();
+        double adjustedTime = currentTime;
         Iterator<NoteVisual> iterator = activeNotes.iterator();
 
         while (iterator.hasNext()) {
@@ -598,6 +650,10 @@ public class RhythmGameScreen {
         return endTime;
     }
 
+    private boolean shouldFinishStage(double currentTime) {
+        return currentTime >= chartEndTime || (musicStarted && musicPlayer.hasMusic() && musicPlayer.isFinished());
+    }
+
     private double gameplaySeconds() {
         if (musicStarted && musicPlayer.hasMusic()) {
             return Math.max(0, musicPlayer.currentTimeSeconds());
@@ -606,52 +662,15 @@ public class RhythmGameScreen {
         return Math.max(0, rawSecondsSinceStart() - COUNTDOWN_SECONDS);
     }
 
-    private double chartSeconds() {
-        return chartSeconds(gameplaySeconds());
-    }
-
-    private double chartSeconds(double audioTime) {
-        return Math.max(0, audioTime - stageChartOffsetSeconds());
-    }
-
-    private double stageChartOffsetSeconds() {
-        return options.getStageChartOffsetSeconds(playableStage);
-    }
-
     private double rawSecondsSinceStart() {
         return (System.nanoTime() - startTime) / 1_000_000_000.0;
     }
 
-    private boolean handleCalibrationKey(int code) {
-        if (code == KeyEvent.VK_OPEN_BRACKET) {
-            options.adjustStageChartOffsetMillis(playableStage, -10);
-            showCalibrationOffset();
-            return true;
-        }
-
-        if (code == KeyEvent.VK_CLOSE_BRACKET) {
-            options.adjustStageChartOffsetMillis(playableStage, 10);
-            showCalibrationOffset();
-            return true;
-        }
-
-        if (code == KeyEvent.VK_0) {
-            options.resetStageChartOffset(playableStage);
-            showCalibrationOffset();
-            return true;
-        }
-
-        return false;
-    }
-
-    private void showCalibrationOffset() {
-        showStageBanner(
-                String.format("CHART OFFSET %+dms", Math.round(stageChartOffsetSeconds() * 1000)),
-                theme.getSoftTextColor()
-        );
-    }
-
     private void togglePause() {
+        if (resumeCountdownActive) {
+            return;
+        }
+
         if (paused) {
             resumeGame();
         } else {
@@ -673,56 +692,76 @@ public class RhythmGameScreen {
             keyHeld[lane] = false;
         }
 
-        updatePauseStats();
         setPauseControlsVisible(true);
         root.repaint();
     }
 
     private void resumeGame() {
-        if (!paused) {
+        if (!paused || resumeCountdownActive) {
             return;
+        }
+
+        startResumeCountdown();
+    }
+
+    private void startResumeCountdown() {
+        resumeCountdownActive = true;
+        resumeCountdownStartedAt = System.nanoTime();
+        setPauseControlsVisible(false);
+
+        resumeCountdownTimer = new Timer(16, e -> {
+            if (resumeCountdownProgress() >= 1.0) {
+                finishResumeCountdown();
+                return;
+            }
+
+            root.repaint();
+        });
+        resumeCountdownTimer.start();
+        root.repaint();
+    }
+
+    private void finishResumeCountdown() {
+        if (resumeCountdownTimer != null) {
+            resumeCountdownTimer.stop();
+            resumeCountdownTimer = null;
         }
 
         startTime += System.nanoTime() - pauseStartedAt;
         paused = false;
+        resumeCountdownActive = false;
         setPauseControlsVisible(false);
         if (musicStarted) {
             musicPlayer.resume();
         }
         timer.start();
+        root.repaint();
+    }
+
+    private double resumeCountdownProgress() {
+        if (!resumeCountdownActive) {
+            return 0;
+        }
+
+        double elapsedMillis = (System.nanoTime() - resumeCountdownStartedAt) / 1_000_000.0;
+        return Math.max(0, Math.min(1, elapsedMillis / RESUME_COUNTDOWN_MILLIS));
+    }
+
+    private String resumeCountdownText() {
+        double elapsedMillis = (System.nanoTime() - resumeCountdownStartedAt) / 1_000_000.0;
+        int remaining = 3 - (int) Math.floor(elapsedMillis / 800.0);
+        return Integer.toString(Math.max(1, remaining));
     }
 
     private void setPauseControlsVisible(boolean visible) {
-        backButton.setVisible(!visible);
+        pauseButton.setVisible(!visible);
         for (JButton button : pauseButtons) {
             button.setVisible(visible);
         }
     }
 
-    private void updatePauseStats() {
-        pauseStatsText =
-                "Score "
-                        + scoreTracker.getScore()
-                        + "   Combo "
-                        + scoreTracker.getCombo()
-                        + "   Accuracy "
-                        + String.format("%.1f%%", scoreTracker.getCurrentAccuracy())
-                        + "\nTime "
-                        + formatTime(chartSeconds())
-                        + " / "
-                        + formatTime(chartEndTime)
-                        + "   Chart Offset "
-                        + String.format("%+dms", Math.round(stageChartOffsetSeconds() * 1000));
-    }
-
     private int laneForKey(int code) {
-        return switch (code) {
-            case KeyEvent.VK_LEFT -> 0;
-            case KeyEvent.VK_UP -> 1;
-            case KeyEvent.VK_DOWN -> 2;
-            case KeyEvent.VK_RIGHT -> 3;
-            default -> -1;
-        };
+        return options.laneForKey(code);
     }
 
     private double stageSpeedMultiplier() {
@@ -734,20 +773,73 @@ public class RhythmGameScreen {
         return String.format("%d:%02d", totalSeconds / 60, totalSeconds % 60);
     }
 
+    private AnimatedGifBackground loadBackgroundImage(PlayableStage stage) {
+        return AnimatedGifBackground.load(AssetCatalog.gameplayBackgroundUrlFor(stage));
+    }
+
     private void finishStage() {
-        stopMusic();
-
-        if (isFullCombo()) {
-            showStageBanner("FULL COMBO", new Color(255, 215, 0));
-
-            Timer delay = new Timer(900, e -> controller.showStageResultStory(playableStage, scoreTracker));
-            delay.setRepeats(false);
-            delay.start();
-            root.repaint();
+        if (endingTransition) {
             return;
         }
 
-        controller.showStageResultStory(playableStage, scoreTracker);
+        scoreRemainingNotesAsMisses();
+        stopMusic();
+        pauseButton.setVisible(false);
+        endingTransition = true;
+        finishStartedAt = System.nanoTime();
+        endFadeStartedAt = 0;
+
+        if (isFullCombo()) {
+            showStageBanner("FULL COMBO", new Color(255, 215, 0));
+        } else {
+            showStageBanner("STAGE COMPLETE", theme.getAccentColor());
+        }
+
+        transitionTimer = new Timer(16, e -> {
+            long now = System.nanoTime();
+            if (endFadeStartedAt == 0
+                    && (now - finishStartedAt) / 1_000_000.0 >= FINISH_HOLD_MILLIS) {
+                endFadeStartedAt = now;
+            }
+
+            root.repaint();
+            if (endFadeAlpha() >= 1.0) {
+                transitionTimer.stop();
+                stopBackgroundAnimationTimer();
+                controller.showStageResultStory(playableStage, scoreTracker);
+            }
+        });
+        transitionTimer.start();
+        root.repaint();
+    }
+
+    private void scoreRemainingNotesAsMisses() {
+        for (Note note : noteData) {
+            if (!note.isHit()) {
+                note.setHit(true);
+                note.setHolding(false);
+                note.setReleaseGraceActive(false);
+                scoreTracker.record(ScoreTracker.Judgment.MISS);
+
+                if (note.isGoldNote()) {
+                    scoreTracker.recordGoldNoteBonus(ScoreTracker.Judgment.MISS);
+                }
+            }
+        }
+
+        activeNotes.clear();
+        for (int lane = 0; lane < keyHeld.length; lane++) {
+            keyHeld[lane] = false;
+        }
+    }
+
+    private double endFadeAlpha() {
+        if (!endingTransition || endFadeStartedAt == 0) {
+            return 0;
+        }
+
+        double elapsedMillis = (System.nanoTime() - endFadeStartedAt) / 1_000_000.0;
+        return Math.max(0, Math.min(1, elapsedMillis / END_FADE_MILLIS));
     }
 
     private boolean isFullCombo() {
@@ -779,16 +871,15 @@ public class RhythmGameScreen {
 
     private void updateDebugOverlay(double audioTime, double currentTime) {
         if (beatProfile == null) {
-            debugText = String.format("Audio %.3f | Chart %.3f", audioTime, currentTime);
+            debugText = String.format("Audio %.3f | Song %.3f", audioTime, currentTime);
             return;
         }
 
         if (currentTime < beatProfile.firstBeatOffset()) {
             debugText = String.format(
-                    "Audio %.3f | Chart %.3f | Offset %+dms | waiting for first beat",
+                    "Audio %.3f | Song %.3f | waiting for first beat",
                     audioTime,
-                    currentTime,
-                    Math.round(stageChartOffsetSeconds() * 1000)
+                    currentTime
             );
             return;
         }
@@ -801,15 +892,14 @@ public class RhythmGameScreen {
         int beatSlot = slot % beatProfile.gridSlotsPerBeat();
 
         debugText = String.format(
-                "Audio %.3f | Chart %.3f | M %02d B %d Slot %02d (%d/%d) | Offset %+dms",
+                "Audio %.3f | Song %.3f | M %02d B %d Slot %02d (%d/%d)",
                 audioTime,
                 currentTime,
                 measure + 1,
                 beat,
                 slot,
                 beatSlot,
-                beatProfile.gridSlotsPerBeat(),
-                Math.round(stageChartOffsetSeconds() * 1000)
+                beatProfile.gridSlotsPerBeat()
         );
     }
 
@@ -835,9 +925,50 @@ public class RhythmGameScreen {
         musicPlayer.playFromStart();
     }
 
+    private void leaveGameplay(Runnable navigation) {
+        if (timer != null) {
+            timer.stop();
+        }
+        if (transitionTimer != null) {
+            transitionTimer.stop();
+        }
+        if (resumeCountdownTimer != null) {
+            resumeCountdownTimer.stop();
+            resumeCountdownTimer = null;
+        }
+        stopBackgroundAnimationTimer();
+        stopMusic();
+        navigation.run();
+    }
+
+    private void startBackgroundAnimationTimer() {
+        if (backgroundImage == null || !backgroundImage.isAnimated()) {
+            return;
+        }
+
+        backgroundAnimationTimer = new Timer(33, e -> {
+            if (root != null && (paused || endingTransition || timer == null || !timer.isRunning())) {
+                root.repaint();
+            }
+        });
+        backgroundAnimationTimer.start();
+    }
+
+    private void stopBackgroundAnimationTimer() {
+        if (backgroundAnimationTimer != null) {
+            backgroundAnimationTimer.stop();
+            backgroundAnimationTimer = null;
+        }
+    }
+
     private void stopMusic() {
+        if (musicPlayer == null || musicDisposed) {
+            return;
+        }
+
         musicPlayer.stop();
         musicPlayer.dispose();
+        musicDisposed = true;
     }
 
     private void createHitBurst(NoteVisual noteVisual, ScoreTracker.Judgment judgment) {
@@ -889,6 +1020,7 @@ public class RhythmGameScreen {
             drawHud(g);
             drawCountdown(g);
             drawPauseOverlay(g);
+            drawEndFadeOverlay(g);
             g.dispose();
         }
 
@@ -902,6 +1034,27 @@ public class RhythmGameScreen {
                     theme.getBackgroundBottom()
             ));
             g.fillRect(0, 0, getWidth(), getHeight());
+
+            BufferedImage frame = backgroundImage == null ? null : backgroundImage.currentFrame();
+            if (frame != null && frame.getWidth() > 0 && frame.getHeight() > 0) {
+                drawCoverImage(g, frame);
+                g.setColor(new Color(1, 7, 18, 132));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setPaint(new GradientPaint(0, 0, new Color(0, 0, 0, 35), 0, getHeight(), new Color(0, 0, 0, 180)));
+                g.fillRect(0, 0, getWidth(), getHeight());
+            }
+        }
+
+        private void drawCoverImage(Graphics2D g, BufferedImage imageAsset) {
+            int imageWidth = imageAsset.getWidth();
+            int imageHeight = imageAsset.getHeight();
+            double scale = Math.max(getWidth() / (double) imageWidth, getHeight() / (double) imageHeight);
+            int drawWidth = (int) Math.ceil(imageWidth * scale);
+            int drawHeight = (int) Math.ceil(imageHeight * scale);
+            int x = (getWidth() - drawWidth) / 2;
+            int y = (getHeight() - drawHeight) / 2;
+
+            g.drawImage(imageAsset, x, y, drawWidth, drawHeight, this);
         }
 
         private void drawLaneGuides(Graphics2D g) {
@@ -935,12 +1088,14 @@ public class RhythmGameScreen {
         }
 
         private void drawHud(Graphics2D g) {
-            drawCenteredText(
+            drawCenteredTextFittedInRange(
                     g,
-                    "Stage " + playableStage.getNumber() + ": " + playableStage.getTitle(),
+                    playableStage.getTitle().toUpperCase(Locale.ROOT),
                     new Font("Georgia", Font.BOLD, 22),
                     theme.getAccentColor(),
-                    42
+                    42,
+                    180,
+                    820
             );
 
             drawRightText(
@@ -1026,25 +1181,42 @@ public class RhythmGameScreen {
                 return;
             }
 
-            g.setColor(new Color(0, 0, 0, 210));
-            g.fillRect(-currentShakeOffset(), 0, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
+            int shakeOffset = currentShakeOffset();
+            g.translate(-shakeOffset, 0);
+
+            g.setColor(new Color(0, 0, 0, 190));
+            g.fillRect(0, 0, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
 
             drawCenteredText(
                     g,
-                    "PAUSED",
+                    resumeCountdownActive ? "RESUMING" : "PAUSED",
                     new Font("Georgia", Font.BOLD, 48),
                     new Color(218, 165, 32),
                     195
             );
 
-            g.setFont(new Font("Arial", Font.BOLD, 18));
-            g.setColor(Color.LIGHT_GRAY);
-            String[] lines = pauseStatsText.split("\\n");
-            int y = 240;
-            for (String line : lines) {
-                drawCenteredText(g, line, g.getFont(), Color.LIGHT_GRAY, y);
-                y += 26;
+            if (resumeCountdownActive) {
+                drawCenteredText(
+                        g,
+                        resumeCountdownText(),
+                        new Font("Georgia", Font.BOLD, 82),
+                        new Color(255, 238, 184),
+                        318
+                );
             }
+
+            g.translate(shakeOffset, 0);
+        }
+
+        private void drawEndFadeOverlay(Graphics2D g) {
+            double alpha = endFadeAlpha();
+            if (alpha <= 0) {
+                return;
+            }
+
+            int overlayAlpha = (int) Math.round(220 * alpha);
+            g.setColor(new Color(0, 0, 0, overlayAlpha));
+            g.fillRect(-currentShakeOffset(), 0, GameConfig.SCENE_WIDTH, GameConfig.SCENE_HEIGHT);
         }
 
         private void drawHitBursts(Graphics2D g) {
@@ -1142,6 +1314,40 @@ public class RhythmGameScreen {
             g.setColor(color);
             FontMetrics metrics = g.getFontMetrics();
             int x = (GameConfig.SCENE_WIDTH - metrics.stringWidth(text)) / 2;
+            g.drawString(text, x, baselineY);
+        }
+
+        private void drawCenteredTextFitted(Graphics2D g, String text, Font font, Color color, int baselineY, int maxWidth) {
+            Font fittedFont = font;
+            g.setFont(fittedFont);
+            while (g.getFontMetrics().stringWidth(text) > maxWidth && fittedFont.getSize() > 14) {
+                fittedFont = fittedFont.deriveFont((float) fittedFont.getSize() - 1f);
+                g.setFont(fittedFont);
+            }
+
+            drawCenteredText(g, text, fittedFont, color, baselineY);
+        }
+
+        private void drawCenteredTextFittedInRange(
+                Graphics2D g,
+                String text,
+                Font font,
+                Color color,
+                int baselineY,
+                int leftX,
+                int rightX
+        ) {
+            Font fittedFont = font;
+            int maxWidth = rightX - leftX;
+            g.setFont(fittedFont);
+            while (g.getFontMetrics().stringWidth(text) > maxWidth && fittedFont.getSize() > 14) {
+                fittedFont = fittedFont.deriveFont((float) fittedFont.getSize() - 1f);
+                g.setFont(fittedFont);
+            }
+
+            FontMetrics metrics = g.getFontMetrics();
+            int x = leftX + (maxWidth - metrics.stringWidth(text)) / 2;
+            g.setColor(color);
             g.drawString(text, x, baselineY);
         }
 

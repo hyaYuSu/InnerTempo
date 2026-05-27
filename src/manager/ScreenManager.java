@@ -1,7 +1,7 @@
 package manager;
 
 import config.GameConfig;
-import gameplay.RandomChartGenerator;
+import gameplay.StageChartGenerator;
 import model.Journey;
 import model.JourneyId;
 import model.JourneyScene;
@@ -19,13 +19,13 @@ public class ScreenManager {
     private final JFrame frame;
     private final GameplaySettings options;
     private final SaveManager saveManager;
-    private final RandomChartGenerator chartGenerator;
+    private final StageChartGenerator chartGenerator;
 
     public ScreenManager(JFrame frame) {
         this.frame = frame;
         this.options = new GameplaySettings();
         this.saveManager = new SaveManager();
-        this.chartGenerator = new RandomChartGenerator();
+        this.chartGenerator = new StageChartGenerator();
     }
 
     public void showTitle() {
@@ -49,7 +49,15 @@ public class ScreenManager {
     }
 
     public void showOptions() {
-        setScreen(new OptionsScreen(this, options).create());
+        setScreen(new OptionsScreen(this, options, saveManager).create());
+    }
+
+    public void showOptions(Runnable backAction) {
+        setScreen(new OptionsScreen(this, options, saveManager, backAction).create());
+    }
+
+    public void restoreScreen(JPanel screen) {
+        setScreen(screen);
     }
 
     public void startStage(PlayableStage playableStage) {

@@ -1,15 +1,16 @@
 package screens;
 
 import content.JourneyCatalog;
+import config.AssetCatalog;
 import manager.SaveManager;
 import manager.ScreenManager;
 import model.Journey;
 import model.JourneyId;
 import model.JourneyScene;
-import model.Stages.LittleBellStage;
 import model.Stages.PlayableStage;
-import model.Stages.WaveStage;
-import ui.GradientPanel;
+import ui.AnimatedGifBackground;
+import ui.GameUiFactory;
+import ui.MenuCardLayout;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -18,28 +19,30 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollBar;
-import javax.swing.JScrollPane;
-import javax.swing.ScrollPaneConstants;
-import javax.swing.Scrollable;
 import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
-import javax.swing.plaf.basic.BasicScrollBarUI;
+import javax.swing.Timer;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
+import java.util.Locale;
 
 public class JourneySelectScreen {
     private static final Color BACKGROUND_TOP = new Color(5, 5, 6);
@@ -53,6 +56,7 @@ public class JourneySelectScreen {
     private static final Color TEXT = new Color(238, 235, 226);
     private static final Color TEXT_MUTED = new Color(164, 160, 150);
     private static final Color TEXT_DIM = new Color(103, 101, 97);
+    private static final float BACKGROUND_IMAGE_OPACITY = 0.35f;
     private static final Font DISPLAY_FONT = new Font("Georgia", Font.BOLD, 42);
     private static final Font TITLE_FONT = new Font("Georgia", Font.BOLD, 30);
     private static final Font BODY_FONT = new Font("Georgia", Font.PLAIN, 16);
@@ -66,7 +70,6 @@ public class JourneySelectScreen {
     private SceneCard selectedCard;
     private JLabel detailKicker;
     private JLabel detailTitle;
-    private JLabel detailMeta;
     private JLabel detailStatus;
     private JTextArea detailSummary;
 
@@ -77,32 +80,21 @@ public class JourneySelectScreen {
     }
 
     public JPanel create() {
-        JPanel root = new GradientPanel(BACKGROUND_TOP, BACKGROUND_BOTTOM);
+        JPanel root = new JourneyBackgroundPanel(AnimatedGifBackground.load(AssetCatalog.titleScreenUrl()));
         root.setLayout(new BorderLayout());
 
         root.add(createJourneyMenu(), BorderLayout.WEST);
-        root.add(createJourneyDetailsScroller(), BorderLayout.CENTER);
+        root.add(createJourneyDetails(), BorderLayout.CENTER);
 
         return root;
-    }
-
-    private JScrollPane createJourneyDetailsScroller() {
-        JScrollPane scrollPane = new JScrollPane(
-                createJourneyDetails(),
-                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
-                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
-        );
-        styleScrollPane(scrollPane);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(24);
-        return scrollPane;
     }
 
     private JPanel createJourneyMenu() {
         JPanel leftPanel = new JPanel();
         leftPanel.setOpaque(false);
         leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
-        leftPanel.setBorder(BorderFactory.createEmptyBorder(50, 42, 50, 28));
-        leftPanel.setPreferredSize(new Dimension(270, 600));
+        leftPanel.setBorder(MenuCardLayout.journeyMenuBorder());
+        leftPanel.setPreferredSize(MenuCardLayout.journeyMenuSize());
 
         JLabel playTitle = createLabel("PLAY", TEXT, DISPLAY_FONT);
         JLabel pickStage = createLabel("SELECT JOURNEY", TEXT_MUTED, new Font("Georgia", Font.BOLD, 13));
@@ -110,7 +102,7 @@ public class JourneySelectScreen {
         JButton waves = createRailButton("WAVES", selectedJourney.getId() == JourneyId.WAVES);
         JButton stage2 = createRailButton("LITTLE BELL", selectedJourney.getId() == JourneyId.GATO);
         JButton comingSoon = createRailButton("COMING SOON", false);
-        JButton backButton = createRailButton("BACK", false);
+        JButton backButton = GameUiFactory.createSmallButton("BACK");
 
         waves.addActionListener(e -> controller.showJourneySelect(JourneyId.WAVES));
         stage2.addActionListener(e -> controller.showJourneySelect(JourneyId.GATO));
@@ -138,12 +130,12 @@ public class JourneySelectScreen {
         sceneCards.clear();
         selectedCard = null;
 
-        JPanel rightPanel = new ScrollableDetailsPanel();
+        JPanel rightPanel = new JPanel();
         rightPanel.setOpaque(false);
         rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
-        rightPanel.setBorder(BorderFactory.createEmptyBorder(52, 36, 42, 56));
+        rightPanel.setBorder(MenuCardLayout.journeyDetailsBorder());
 
-        JLabel title = createLabel(selectedJourney.getTitle(), GOLD, TITLE_FONT);
+        JLabel title = createLabel(selectedJourney.getTitle().toUpperCase(Locale.ROOT), GOLD, TITLE_FONT);
         JLabel subtitle = createLabel(
                 selectedJourney.getSubtitle(),
                 TEXT,
@@ -158,82 +150,98 @@ public class JourneySelectScreen {
         JLabel progress = createLabel(progressText(), GOLD_SOFT, META_FONT);
 
         addLeftAligned(rightPanel, title);
-        rightPanel.add(Box.createVerticalStrut(8));
+        rightPanel.add(Box.createVerticalStrut(6));
         addLeftAligned(rightPanel, subtitle);
-        rightPanel.add(Box.createVerticalStrut(10));
+        rightPanel.add(Box.createVerticalStrut(8));
         addLeftAligned(rightPanel, description);
-        rightPanel.add(Box.createVerticalStrut(14));
+        rightPanel.add(Box.createVerticalStrut(10));
         addLeftAligned(rightPanel, progress);
-        rightPanel.add(Box.createVerticalStrut(24));
-        addLeftAligned(rightPanel, createSceneScroller());
-        rightPanel.add(Box.createVerticalStrut(24));
+        rightPanel.add(Box.createVerticalStrut(14));
+        addLeftAligned(rightPanel, createSceneGrid());
+        rightPanel.add(Box.createVerticalStrut(10));
         addLeftAligned(rightPanel, createDetailPanel());
 
         selectScene(sceneCards.get(0), selectedJourney.getScenes().get(0), isUnlocked(selectedJourney.getScenes().get(0)));
         return rightPanel;
     }
 
-    private JScrollPane createSceneScroller() {
+    private JPanel createSceneGrid() {
         JPanel cardsRow = new JPanel();
         cardsRow.setOpaque(false);
-        cardsRow.setLayout(new BoxLayout(cardsRow, BoxLayout.X_AXIS));
-        cardsRow.setBorder(BorderFactory.createEmptyBorder(8, 8, 16, 8));
+        cardsRow.setLayout(new GridLayout(
+                0,
+                MenuCardLayout.SCENE_GRID_COLUMNS,
+                MenuCardLayout.SCENE_GRID_HORIZONTAL_GAP,
+                MenuCardLayout.SCENE_GRID_VERTICAL_GAP
+        ));
+        cardsRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        cardsRow.setPreferredSize(MenuCardLayout.sceneGridSize());
+        cardsRow.setMaximumSize(MenuCardLayout.sceneGridSize());
 
         for (JourneyScene scene : selectedJourney.getScenes()) {
             boolean unlocked = isUnlocked(scene);
             SceneCard card = new SceneCard(scene, unlocked);
             sceneCards.add(card);
-
-            card.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    selectScene(card, scene, unlocked);
-                }
-
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    selectScene(card, scene, unlocked);
-                    if (unlocked) {
-                        openScene(scene);
-                    }
-                }
-            });
+            installSceneCardInteraction(card, scene, unlocked);
 
             cardsRow.add(card);
-            cardsRow.add(Box.createHorizontalStrut(16));
         }
 
-        JScrollPane scrollPane = new JScrollPane(
-                cardsRow,
-                ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
-                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
-        );
-        styleScrollPane(scrollPane);
-        scrollPane.setPreferredSize(new Dimension(820, 232));
-        scrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, 232));
-        scrollPane.getHorizontalScrollBar().setUnitIncrement(26);
-        return scrollPane;
+        return cardsRow;
+    }
+
+    private void installSceneCardInteraction(SceneCard card, JourneyScene scene, boolean unlocked) {
+        MouseAdapter sceneCardHandler = new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                selectScene(card, scene, unlocked);
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                selectScene(card, scene, unlocked);
+                if (unlocked) {
+                    openScene(scene);
+                }
+            }
+        };
+
+        attachSceneCardHandler(card, sceneCardHandler);
+    }
+
+    private void attachSceneCardHandler(Component component, MouseAdapter handler) {
+        component.addMouseListener(handler);
+        component.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                attachSceneCardHandler(child, handler);
+            }
+        }
+    }
+
+    private AnimatedGifBackground sceneCardBackground(JourneyScene scene) {
+        return AnimatedGifBackground.load(AssetCatalog.cardBackgroundUrlFor(scene.getPlayableStage()));
     }
 
     private JPanel createDetailPanel() {
         JPanel panel = new CinematicPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createEmptyBorder(22, 24, 22, 24));
-        panel.setPreferredSize(new Dimension(820, 190));
-        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 190));
+        panel.setBorder(BorderFactory.createEmptyBorder(14, 22, 14, 22));
+        panel.setPreferredSize(MenuCardLayout.detailPanelSize());
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, MenuCardLayout.DETAIL_PANEL_HEIGHT));
 
         detailKicker = createLabel("", GOLD_SOFT, META_FONT);
-        detailTitle = createLabel("", TEXT, new Font("Georgia", Font.BOLD, 28));
-        detailMeta = createLabel("", TEXT_MUTED, new Font("Georgia", Font.BOLD, 14));
-        detailSummary = createWrappedText("", TEXT, BODY_FONT, 740);
-        detailStatus = createLabel("", GOLD, new Font("Georgia", Font.BOLD, 15));
+        detailTitle = createLabel("", TEXT, new Font("Georgia", Font.BOLD, 24));
+        detailSummary = createWrappedText("", TEXT, new Font("Georgia", Font.PLAIN, 14), 740);
+        detailStatus = createLabel("", GOLD, new Font("Georgia", Font.BOLD, 13));
+        detailSummary.setPreferredSize(new Dimension(740, 48));
+        detailSummary.setMaximumSize(new Dimension(740, 52));
 
         addLeftAligned(panel, detailKicker);
-        panel.add(Box.createVerticalStrut(7));
+        panel.add(Box.createVerticalStrut(4));
         addLeftAligned(panel, detailTitle);
-        panel.add(Box.createVerticalStrut(10));
-        addLeftAligned(panel, detailMeta);
-        panel.add(Box.createVerticalStrut(14));
+        panel.add(Box.createVerticalStrut(8));
         addLeftAligned(panel, detailSummary);
         panel.add(Box.createVerticalGlue());
         addLeftAligned(panel, detailStatus);
@@ -250,14 +258,12 @@ public class JourneySelectScreen {
         selectedCard.setSelectedCard(true);
 
         detailKicker.setText(sceneKicker(scene));
-        detailTitle.setText(scene.getTitle());
-        detailMeta.setText(previewMetaText(scene, unlocked));
+        detailTitle.setText(scene.getTitle().toUpperCase(Locale.ROOT));
         detailSummary.setText(scene.getSummary());
-        detailStatus.setText(unlocked ? "READY" : "LOCKED - " + scene.getLockedReason());
+        detailStatus.setText(sceneStatus(scene, unlocked));
 
         detailKicker.revalidate();
         detailTitle.revalidate();
-        detailMeta.revalidate();
         detailSummary.revalidate();
         detailStatus.revalidate();
     }
@@ -284,58 +290,58 @@ public class JourneySelectScreen {
         return String.format("SCENE %02d", scene.getNumber());
     }
 
-    private String previewMetaText(JourneyScene scene, boolean unlocked) {
-        PlayableStage playableStage = scene.getPlayableStage();
-
-        if (playableStage == null) {
-            return unlocked ? "Story scene | Unlocked" : "Story scene | Locked";
-        }
-
-        return difficultyText(playableStage)
-                + " | "
-                + bpmText(playableStage)
-                + " | Best "
-                + saveManager.getHighScore(playableStage)
-                + " | "
-                + (unlocked ? "Unlocked" : "Locked");
-    }
-
-    private String difficultyText(PlayableStage stage) {
-        int level = Math.min(5, stage.getIndex() + 1);
-
-        return "Difficulty " + level + "/5";
-    }
-
-    private String bpmText(PlayableStage stage) {
-        if (stage == WaveStage.DRIFT) {
-            return "80 BPM";
-        }
-
-        if (stage == WaveStage.FIRST_WAVES) {
-            return "100 BPM";
-        }
-
-        if (stage instanceof WaveStage) {
-            return "Generated rhythm";
-        }
-
-        if (stage instanceof LittleBellStage) {
-            return "Story rhythm";
-        }
-
-        return "Rhythm stage";
-    }
-
     private String progressText() {
         int unlocked = 0;
+        int cleared = 0;
+        JourneyScene nextLockedScene = null;
 
         for (JourneyScene scene : selectedJourney.getScenes()) {
             if (isUnlocked(scene)) {
                 unlocked++;
             }
+
+            PlayableStage playableStage = scene.getPlayableStage();
+            if (playableStage != null && saveManager.isCleared(playableStage)) {
+                cleared++;
+            }
+
+            if (nextLockedScene == null && !isUnlocked(scene)) {
+                nextLockedScene = scene;
+            }
         }
 
-        return unlocked + " / " + selectedJourney.getScenes().size() + " scenes unlocked";
+        String progress = cleared + " / " + selectedJourney.getScenes().size()
+                + " scenes cleared - " + unlocked + " unlocked";
+
+        if (nextLockedScene != null) {
+            progress += " - Next unlock: " + nextLockedScene.getLockedReason();
+        }
+
+        return progress;
+    }
+
+    private String sceneStatus(JourneyScene scene, boolean unlocked) {
+        if (!unlocked) {
+            return "LOCKED: " + scene.getLockedReason();
+        }
+
+        PlayableStage stage = scene.getPlayableStage();
+        if (stage == null) {
+            return "STORY";
+        }
+
+        double bestAccuracy = saveManager.getBestAccuracy(stage);
+        if (saveManager.isCleared(stage)) {
+            return bestAccuracy > 0
+                    ? String.format("CLEARED - BEST %.1f%%", bestAccuracy)
+                    : "CLEARED";
+        }
+
+        if (bestAccuracy > 0) {
+            return String.format("READY - BEST %.1f%%", bestAccuracy);
+        }
+
+        return "READY";
     }
 
     private JButton createRailButton(String text, boolean selected) {
@@ -402,44 +408,6 @@ public class JourneySelectScreen {
         return area;
     }
 
-    private void styleScrollPane(JScrollPane scrollPane) {
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.setOpaque(false);
-        scrollPane.getViewport().setOpaque(false);
-        styleScrollBar(scrollPane.getVerticalScrollBar());
-        styleScrollBar(scrollPane.getHorizontalScrollBar());
-    }
-
-    private void styleScrollBar(JScrollBar scrollBar) {
-        scrollBar.setOpaque(false);
-        scrollBar.setPreferredSize(new Dimension(8, 8));
-        scrollBar.setUI(new BasicScrollBarUI() {
-            @Override
-            protected void configureScrollBarColors() {
-                thumbColor = new Color(70, 63, 47);
-                trackColor = new Color(0, 0, 0, 0);
-            }
-
-            @Override
-            protected JButton createDecreaseButton(int orientation) {
-                return createZeroButton();
-            }
-
-            @Override
-            protected JButton createIncreaseButton(int orientation) {
-                return createZeroButton();
-            }
-
-            private JButton createZeroButton() {
-                JButton button = new JButton();
-                button.setPreferredSize(new Dimension(0, 0));
-                button.setMinimumSize(new Dimension(0, 0));
-                button.setMaximumSize(new Dimension(0, 0));
-                return button;
-            }
-        });
-    }
-
     private void addLeftAligned(JPanel panel, Component component) {
         if (component instanceof JComponent swingComponent) {
             swingComponent.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -448,38 +416,92 @@ public class JourneySelectScreen {
         panel.add(component);
     }
 
+    private static final class JourneyBackgroundPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+
+        private final AnimatedGifBackground backgroundImage;
+        private final Timer animationTimer;
+
+        private JourneyBackgroundPanel(AnimatedGifBackground backgroundImage) {
+            this.backgroundImage = backgroundImage;
+            setOpaque(true);
+
+            if (backgroundImage != null && backgroundImage.isAnimated()) {
+                animationTimer = new Timer(33, e -> repaint());
+                animationTimer.start();
+            } else {
+                animationTimer = null;
+            }
+        }
+
+        @Override
+        public void removeNotify() {
+            if (animationTimer != null) {
+                animationTimer.stop();
+            }
+
+            super.removeNotify();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setPaint(new GradientPaint(0, 0, BACKGROUND_TOP, 0, getHeight(), BACKGROUND_BOTTOM));
+            g.fillRect(0, 0, getWidth(), getHeight());
+
+            BufferedImage frame = backgroundImage == null ? null : backgroundImage.currentFrame();
+            if (frame != null && frame.getWidth() > 0 && frame.getHeight() > 0) {
+                g.setComposite(AlphaComposite.SrcOver.derive(BACKGROUND_IMAGE_OPACITY));
+                drawCoverImage(g, frame);
+                g.setComposite(AlphaComposite.SrcOver);
+                g.setColor(new Color(0, 0, 0, 122));
+                g.fillRect(0, 0, getWidth(), getHeight());
+            }
+
+            g.dispose();
+        }
+
+        private void drawCoverImage(Graphics2D g, BufferedImage frame) {
+            int imageWidth = frame.getWidth();
+            int imageHeight = frame.getHeight();
+            double scale = Math.max(getWidth() / (double) imageWidth, getHeight() / (double) imageHeight);
+            int drawWidth = (int) Math.ceil(imageWidth * scale);
+            int drawHeight = (int) Math.ceil(imageHeight * scale);
+            int x = (getWidth() - drawWidth) / 2;
+            int y = (getHeight() - drawHeight) / 2;
+
+            g.drawImage(frame, x, y, drawWidth, drawHeight, this);
+        }
+    }
+
     private final class SceneCard extends JPanel {
-        private static final int CARD_WIDTH = 216;
-        private static final int CARD_HEIGHT = 176;
+        private static final Font CARD_TITLE_FONT = new Font("Georgia", Font.BOLD, 16);
+        private static final Font CARD_TITLE_SMALL_FONT = new Font("Georgia", Font.BOLD, 14);
 
         private final JourneyScene scene;
         private final boolean unlocked;
+        private final AnimatedGifBackground backgroundImage;
+        private final Timer animationTimer;
         private boolean selected;
 
         private SceneCard(JourneyScene scene, boolean unlocked) {
             this.scene = scene;
             this.unlocked = unlocked;
+            this.backgroundImage = sceneCardBackground(scene);
 
             setOpaque(false);
-            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-            setBorder(BorderFactory.createEmptyBorder(20, 20, 18, 20));
-            setPreferredSize(new Dimension(CARD_WIDTH, CARD_HEIGHT));
-            setMinimumSize(new Dimension(CARD_WIDTH, CARD_HEIGHT));
-            setMaximumSize(new Dimension(CARD_WIDTH, CARD_HEIGHT));
+            setPreferredSize(MenuCardLayout.sceneCardSize());
+            setMinimumSize(MenuCardLayout.sceneCardSize());
+            setMaximumSize(MenuCardLayout.sceneCardSize());
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-            JLabel sceneNumber = createLabel(sceneKicker(scene), unlocked ? GOLD_SOFT : TEXT_DIM, META_FONT);
-            JLabel title = createLabel(scene.getTitle(), unlocked ? TEXT : TEXT_DIM, new Font("Georgia", Font.BOLD, 22));
-            JTextArea summary = createWrappedText(scene.getSummary(), unlocked ? TEXT_MUTED : TEXT_DIM, new Font("Georgia", Font.PLAIN, 13), 170);
-            JLabel status = createLabel(cardStatus(scene, unlocked), unlocked ? GOLD : TEXT_DIM, new Font("Georgia", Font.BOLD, 12));
-
-            addLeftAligned(this, sceneNumber);
-            add(Box.createVerticalStrut(12));
-            addLeftAligned(this, title);
-            add(Box.createVerticalStrut(10));
-            addLeftAligned(this, summary);
-            add(Box.createVerticalGlue());
-            addLeftAligned(this, status);
+            if (backgroundImage != null && backgroundImage.isAnimated()) {
+                animationTimer = new Timer(33, e -> repaint());
+                animationTimer.start();
+            } else {
+                animationTimer = null;
+            }
         }
 
         private void setSelectedCard(boolean selected) {
@@ -488,57 +510,136 @@ public class JourneySelectScreen {
         }
 
         @Override
+        public void removeNotify() {
+            if (animationTimer != null) {
+                animationTimer.stop();
+            }
+
+            super.removeNotify();
+        }
+
+        @Override
         protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-            int x = 7;
-            int y = 7;
-            int width = getWidth() - 14;
-            int height = getHeight() - 14;
-            int arc = 18;
+            int x = 0;
+            int y = 0;
+            int width = getWidth() - 1;
+            int height = getHeight() - 1;
+            int arc = 14;
+            RoundRectangle2D cardShape = new RoundRectangle2D.Double(x, y, width, height, arc, arc);
 
             if (selected) {
                 g2.setColor(new Color(GOLD.getRed(), GOLD.getGreen(), GOLD.getBlue(), unlocked ? 52 : 28));
-                g2.setStroke(new BasicStroke(5f));
-                g2.drawRoundRect(x - 2, y - 2, width + 4, height + 4, arc + 4, arc + 4);
+                g2.fill(cardShape);
             }
 
-            g2.setPaint(new GradientPaint(
-                    0,
-                    y,
-                    unlocked ? PANEL_DARK : PANEL_DARKER,
-                    0,
-                    y + height,
-                    unlocked ? new Color(8, 8, 8) : new Color(6, 6, 7)
-            ));
-            g2.fillRoundRect(x, y, width, height, arc, arc);
-
-            g2.setColor(selected ? GOLD_SOFT : unlocked ? BORDER : BORDER_MUTED);
-            g2.setStroke(new BasicStroke(selected ? 1.6f : 1f));
-            g2.drawRoundRect(x, y, width, height, arc, arc);
+            BufferedImage frame = backgroundImage == null ? null : backgroundImage.currentFrame();
+            if (frame != null && frame.getWidth() > 0 && frame.getHeight() > 0) {
+                Shape previousClip = g2.getClip();
+                g2.clip(cardShape);
+                drawCoverImage(g2, frame, x, y, width, height);
+                g2.setColor(new Color(0, 0, 0, unlocked ? 105 : 178));
+                g2.fillRect(x, y, width, height);
+                g2.setPaint(new GradientPaint(0, y, new Color(0, 0, 0, 20), 0, y + height, new Color(0, 0, 0, 150)));
+                g2.fillRect(x, y, width, height);
+                g2.setClip(previousClip);
+            } else {
+                g2.setPaint(new GradientPaint(
+                        0,
+                        y,
+                        unlocked ? PANEL_DARK : PANEL_DARKER,
+                        0,
+                        y + height,
+                        unlocked ? new Color(8, 8, 8) : new Color(6, 6, 7)
+                ));
+                g2.fill(cardShape);
+            }
 
             if (!unlocked) {
                 g2.setColor(new Color(0, 0, 0, 72));
                 g2.fillRoundRect(x, y, width, height, arc, arc);
             }
 
+            g2.setColor(selected ? GOLD_SOFT : unlocked ? BORDER : BORDER_MUTED);
+            g2.setStroke(new BasicStroke(selected ? 2f : 1f));
+            g2.draw(cardShape);
+
+            drawCardText(g2, x, y, width, height);
             g2.dispose();
-            super.paintComponent(g);
         }
 
-        private String cardStatus(JourneyScene scene, boolean unlocked) {
-            if (!unlocked) {
-                return "LOCKED";
-            }
+        private void drawCoverImage(Graphics2D g, BufferedImage frame, int x, int y, int width, int height) {
+            double scale = Math.max(width / (double) frame.getWidth(), height / (double) frame.getHeight());
+            int drawWidth = (int) Math.ceil(frame.getWidth() * scale);
+            int drawHeight = (int) Math.ceil(frame.getHeight() * scale);
+            int drawX = x + (width - drawWidth) / 2;
+            int drawY = y + (height - drawHeight) / 2;
 
-            PlayableStage stage = scene.getPlayableStage();
-            if (stage == null) {
-                return "STORY";
-            }
-
-            return "BEST " + saveManager.getHighScore(stage);
+            g.drawImage(frame, drawX, drawY, drawWidth, drawHeight, this);
         }
+
+        private void drawCardText(Graphics2D g, int x, int y, int width, int height) {
+            int left = x + 18;
+            int maxTextWidth = width - 36;
+            Color titleColor = unlocked ? GOLD : TEXT_DIM;
+            String cardTitle = scene.getTitle().toUpperCase(Locale.ROOT);
+
+            Font titleFont = titleFitsOnOneLine(g, cardTitle, CARD_TITLE_FONT, maxTextWidth)
+                    ? CARD_TITLE_FONT
+                    : CARD_TITLE_SMALL_FONT;
+            g.setFont(titleFont);
+            java.util.List<String> titleLines = wrapCardTitle(cardTitle, g.getFontMetrics(), maxTextWidth);
+            int lineHeight = 18;
+            int titleBaseline = y + 28;
+            for (String line : titleLines) {
+                drawShadowedText(g, line, titleFont, titleColor, left, titleBaseline);
+                titleBaseline += lineHeight;
+            }
+        }
+
+        private boolean titleFitsOnOneLine(Graphics2D g, String title, Font font, int maxWidth) {
+            g.setFont(font);
+            return g.getFontMetrics().stringWidth(title) <= maxWidth;
+        }
+
+        private java.util.List<String> wrapCardTitle(String title, java.awt.FontMetrics metrics, int maxWidth) {
+            java.util.List<String> lines = new java.util.ArrayList<>();
+            StringBuilder currentLine = new StringBuilder();
+
+            for (String word : title.split("\\s+")) {
+                String candidate = currentLine.isEmpty() ? word : currentLine + " " + word;
+                if (metrics.stringWidth(candidate) <= maxWidth || currentLine.isEmpty()) {
+                    currentLine = new StringBuilder(candidate);
+                } else {
+                    lines.add(currentLine.toString());
+                    currentLine = new StringBuilder(word);
+                }
+            }
+
+            if (!currentLine.isEmpty()) {
+                lines.add(currentLine.toString());
+            }
+
+            if (lines.size() <= 2) {
+                return lines;
+            }
+
+            return java.util.List.of(lines.get(0), lines.get(1));
+        }
+
+        private void drawShadowedText(Graphics2D g, String text, Font font, Color color, int x, int baselineY) {
+            g.setFont(font);
+            g.setColor(new Color(0, 0, 0, 170));
+            g.drawString(text, x + 1, baselineY + 1);
+            g.setColor(color);
+            g.drawString(text, x, baselineY);
+        }
+
     }
 
     private static final class CinematicPanel extends JPanel {
@@ -568,30 +669,4 @@ public class JourneySelectScreen {
         }
     }
 
-    private static final class ScrollableDetailsPanel extends JPanel implements Scrollable {
-        @Override
-        public Dimension getPreferredScrollableViewportSize() {
-            return getPreferredSize();
-        }
-
-        @Override
-        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-            return 24;
-        }
-
-        @Override
-        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
-            return Math.max(24, visibleRect.height - 48);
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportWidth() {
-            return true;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportHeight() {
-            return false;
-        }
-    }
 }

@@ -1,19 +1,16 @@
 package settings;
 
-import model.Stages.PlayableStage;
-
-import java.util.HashMap;
-import java.util.Map;
+import java.awt.event.KeyEvent;
 
 public class GameplaySettings {
-    private static final double MIN_STAGE_CHART_OFFSET = -0.30;
-    private static final double MAX_STAGE_CHART_OFFSET = 0.30;
-
-    private final Map<String, Double> stageChartOffsets = new HashMap<>();
+    private static final int MIN_VOLUME_PERCENT = 0;
+    private static final int MAX_VOLUME_PERCENT = 100;
+    private static final int VOLUME_STEP_PERCENT = 10;
 
     private double noteSpeedMultiplier = 1.0;
     private double timingWindowScale = 1.0;
-    private double inputOffsetSeconds = 0.0;
+    private int musicVolumePercent = 80;
+    private final int[] laneKeyCodes = {KeyEvent.VK_LEFT, KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_RIGHT};
 
     public double getNoteSpeedMultiplier() {
         return noteSpeedMultiplier;
@@ -23,12 +20,83 @@ public class GameplaySettings {
         return timingWindowScale;
     }
 
-    public double getInputOffsetSeconds() {
-        return inputOffsetSeconds;
+    public double getMusicVolume() {
+        return musicVolumePercent / 100.0;
     }
 
-    public double getStageChartOffsetSeconds(PlayableStage stage) {
-        return stageChartOffsets.getOrDefault(stageKey(stage), 0.0);
+    public int getMusicVolumePercent() {
+        return musicVolumePercent;
+    }
+
+    public void setMusicVolumePercent(int musicVolumePercent) {
+        this.musicVolumePercent = Math.max(MIN_VOLUME_PERCENT, Math.min(MAX_VOLUME_PERCENT, musicVolumePercent));
+    }
+
+    public String volumeLabel() {
+        return "Volume: " + musicVolumePercent + "%";
+    }
+
+    public String controlsLabel() {
+        return "Controls: " + keyLabelForLane(0)
+                + "  " + keyLabelForLane(1)
+                + "  " + keyLabelForLane(2)
+                + "  " + keyLabelForLane(3);
+    }
+
+    public int[] laneKeyCodes() {
+        return laneKeyCodes.clone();
+    }
+
+    public int laneForKey(int keyCode) {
+        for (int lane = 0; lane < laneKeyCodes.length; lane++) {
+            if (laneKeyCodes[lane] == keyCode) {
+                return lane;
+            }
+        }
+
+        return -1;
+    }
+
+    public void decreaseVolume() {
+        musicVolumePercent = Math.max(MIN_VOLUME_PERCENT, musicVolumePercent - VOLUME_STEP_PERCENT);
+    }
+
+    public void increaseVolume() {
+        musicVolumePercent = Math.min(MAX_VOLUME_PERCENT, musicVolumePercent + VOLUME_STEP_PERCENT);
+    }
+
+    public String keyLabelForLane(int lane) {
+        if (lane < 0 || lane >= laneKeyCodes.length) {
+            return "?";
+        }
+
+        return KeyEvent.getKeyText(laneKeyCodes[lane]);
+    }
+
+    public void setLaneKeyCode(int lane, int keyCode) {
+        if (lane < 0 || lane >= laneKeyCodes.length || isReservedGameplayKey(keyCode)) {
+            return;
+        }
+
+        int previousKey = laneKeyCodes[lane];
+        for (int otherLane = 0; otherLane < laneKeyCodes.length; otherLane++) {
+            if (otherLane != lane && laneKeyCodes[otherLane] == keyCode) {
+                laneKeyCodes[otherLane] = previousKey;
+            }
+        }
+
+        laneKeyCodes[lane] = keyCode;
+    }
+
+    private boolean isReservedGameplayKey(int keyCode) {
+        return keyCode == KeyEvent.VK_ESCAPE;
+    }
+
+    public void resetControls() {
+        laneKeyCodes[0] = KeyEvent.VK_LEFT;
+        laneKeyCodes[1] = KeyEvent.VK_UP;
+        laneKeyCodes[2] = KeyEvent.VK_DOWN;
+        laneKeyCodes[3] = KeyEvent.VK_RIGHT;
     }
 
     public void decreaseNoteSpeed() {
@@ -51,34 +119,9 @@ public class GameplaySettings {
         timingWindowScale = 1.2;
     }
 
-    public void adjustInputOffsetMillis(int millis) {
-        inputOffsetSeconds = Math.max(-0.15, Math.min(0.15, inputOffsetSeconds + millis / 1000.0));
-    }
-
-    public void resetInputOffset() {
-        inputOffsetSeconds = 0;
-    }
-
-    public void adjustStageChartOffsetMillis(PlayableStage stage, int millis) {
-        double nextOffset = getStageChartOffsetSeconds(stage) + millis / 1000.0;
-        stageChartOffsets.put(stageKey(stage), clamp(nextOffset, MIN_STAGE_CHART_OFFSET, MAX_STAGE_CHART_OFFSET));
-    }
-
-    public void resetStageChartOffset(PlayableStage stage) {
-        stageChartOffsets.remove(stageKey(stage));
-    }
-
     public String timingLabel() {
         if (timingWindowScale < 1.0) return "Strict";
         if (timingWindowScale > 1.0) return "Relaxed";
         return "Normal";
-    }
-
-    private String stageKey(PlayableStage stage) {
-        return stage.getSaveKeyPrefix() + "." + stage.getNumber();
-    }
-
-    private double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
     }
 }
