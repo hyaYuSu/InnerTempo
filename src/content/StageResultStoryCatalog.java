@@ -65,16 +65,23 @@ public final class StageResultStoryCatalog {
 
     private static String littleBellStory(LittleBellStage stage, boolean cleared) {
         if (!cleared) {
-            return "The fog folds back around Little Bell. The basket is still empty, and the path waits to be walked again.";
+            return switch (stage) {
+                case EMPTY_BASKET -> "Little Bell loses the rhythm in the fog. The basket stays between his teeth, still empty and still heavy.";
+                case UNDER_THE_TABLE -> "The shadows behind the crates grow too loud. Little Bell flinches back before he can pass through them.";
+                case RAIN_ALLEY -> "The rusted stairs hold their cold. Little Bell remembers the red toy, but the memory slips away before it can warm him.";
+                case WINDOW_LIGHT -> "The basket feels too heavy to lift. Little Bell sinks closer to the alley, still wishing for warmth.";
+                case THRESHOLD_LIGHT -> "The yellow light waits beyond the fog, but Little Bell cannot step into it yet. The voice inside him still says to hide.";
+                case LITTLE_BELL -> "The door opens, but Little Bell cannot believe the welcome yet. He looks back at the empty basket and trembles.";
+            };
         }
 
         return switch (stage) {
-            case EMPTY_BASKET -> "Little Bell keeps hold of the basket, even when nothing inside it feels heavier than stone.";
-            case UNDER_THE_TABLE -> "The city watches, but Little Bell keeps moving through the crates and shadows.";
-            case RAIN_ALLEY -> "The cold corner cannot make Little Bell disappear, even when the old joy feels lost.";
-            case WINDOW_LIGHT -> "Little Bell is tired, but still refuses to become another piece of the alley.";
-            case THRESHOLD_LIGHT -> "The warm light cuts through the fog, and Little Bell chooses to step toward it.";
-            case LITTLE_BELL -> "Little Bell is seen without the toy, without the old self, and that is enough.";
+            case EMPTY_BASKET -> "Little Bell keeps walking through the fog with the empty basket. It is heavy, but he has not let go.";
+            case UNDER_THE_TABLE -> "The city watches from the crates and shadows. Little Bell is afraid, but he keeps searching for the joy he lost.";
+            case RAIN_ALLEY -> "Under the rusted stairs, Little Bell remembers the bright red toy. The memory hurts, but it proves warmth was real.";
+            case WINDOW_LIGHT -> "Little Bell is shaking and tired, but he refuses to become another piece of the alley.";
+            case THRESHOLD_LIGHT -> "The warm yellow light cuts through the fog. Little Bell steps toward it, even with an empty basket.";
+            case LITTLE_BELL -> "The kind voice sees Little Bell, not the void in the basket. He does not need the toy to be worthy of the light.";
         };
     }
 }

@@ -3,7 +3,9 @@ package screens;
 import audio.StageMusicPlayer;
 import config.AssetCatalog;
 import config.GameConfig;
+import gameplay.GameplayEffects;
 import gameplay.HitJudge;
+import gameplay.RhythmInputHandler;
 import gameplay.StageBeatProfile;
 import gameplay.StageChartGenerator;
 import manager.ScreenManager;
@@ -12,30 +14,21 @@ import model.Stages.PlayableStage;
 import score.ScoreTracker;
 import settings.GameplaySettings;
 import ui.AnimatedGifBackground;
-import ui.GameUiFactory;
 import ui.GameplayFeedback;
 import ui.JudgmentStyle;
 import ui.JourneyTheme;
-import ui.MenuCardLayout;
 import ui.NoteRenderer;
 
-import javax.swing.AbstractAction;
-import javax.swing.JButton;
-import javax.swing.JComponent;
 import javax.swing.JPanel;
-import javax.swing.KeyStroke;
 import javax.swing.Timer;
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
@@ -57,25 +50,23 @@ public class RhythmGameScreen {
     private static final int END_FADE_MILLIS = 650;
     private static final int FINISH_HOLD_MILLIS = 650;
     private static final int RESUME_COUNTDOWN_MILLIS = 2400;
-    private static final int PAUSE_MENU_BUTTON_WIDTH = MenuCardLayout.MAIN_MENU_BUTTON_WIDTH - 8;
 
     private final ScreenManager controller;
     private final GameplaySettings options;
     private final StageChartGenerator chartGenerator;
     private final PlayableStage playableStage;
     private final HitJudge hitJudge;
+    private final RhythmInputHandler inputHandler;
     private final JourneyTheme theme;
     private final StageBeatProfile beatProfile;
     private final AnimatedGifBackground backgroundImage;
+    private final GameplayEffects effects = new GameplayEffects();
 
     private final List<NoteVisual> activeNotes = new ArrayList<>();
-    private final List<HitBurst> hitBursts = new ArrayList<>();
-    private final List<BeatPulse> beatPulses = new ArrayList<>();
     private final boolean[] keyHeld = new boolean[4];
 
     private GamePanel root;
-    private JButton pauseButton;
-    private final List<JButton> pauseButtons = new ArrayList<>();
+    private PauseMenu pauseMenu;
     private List<Note> noteData;
     private ScoreTracker scoreTracker;
     private StageMusicPlayer musicPlayer;
@@ -104,13 +95,10 @@ public class RhythmGameScreen {
     private double currentChartTime;
     private String countdownText = "3";
     private boolean countdownVisible = true;
-    private String debugText = "";
-    private boolean debugVisible;
     private String judgmentText = "";
     private Color judgmentColor = Color.WHITE;
     private String milestoneText = "";
     private Color milestoneColor = Color.WHITE;
-    private int[] boundLaneKeyCodes = new int[0];
     private boolean musicDisposed;
 
     public RhythmGameScreen(
@@ -124,6 +112,7 @@ public class RhythmGameScreen {
         this.chartGenerator = chartGenerator;
         this.playableStage = playableStage;
         this.hitJudge = new HitJudge(options);
+        this.inputHandler = new RhythmInputHandler(options);
         this.theme = JourneyTheme.forStage(playableStage);
         this.beatProfile = StageBeatProfile.forStage(playableStage).orElse(null);
         this.backgroundImage = loadBackgroundImage(playableStage);
@@ -141,8 +130,8 @@ public class RhythmGameScreen {
         noteSpeed = GameConfig.BASE_NOTE_SPEED * options.getNoteSpeedMultiplier() * stageSpeedMultiplier();
         currentChartTime = 0;
 
-        createControls();
-        installKeyBindings(root);
+        createPauseMenu();
+        installInputBindings();
 
         startTime = System.nanoTime();
         timer = new Timer(16, e -> tick());
@@ -152,111 +141,32 @@ public class RhythmGameScreen {
         return root;
     }
 
-    private void createControls() {
-        pauseButton = GameUiFactory.createSmallButton("PAUSE");
-        placeButton(pauseButton, 30, 25);
-        pauseButton.addActionListener(e -> togglePause());
-        root.add(pauseButton);
-
-        JButton resumeButton = createPauseMenuButton("RESUME", "Rsme");
-        JButton retryButton = createPauseMenuButton("RETRY", "Rtry");
-        JButton scenesButton = createPauseMenuButton("SCENES", "Home");
-        JButton optionsButton = createPauseMenuButton("OPTIONS", "Opt");
-
-        resumeButton.addActionListener(e -> resumeGame());
-        retryButton.addActionListener(e -> {
-            leaveGameplay(() -> controller.startStage(playableStage));
-        });
-        scenesButton.addActionListener(e -> {
-            leaveGameplay(() -> controller.showJourneySelect(playableStage.getJourneyId()));
-        });
-        optionsButton.addActionListener(e -> {
-            controller.showOptions(() -> {
-                musicPlayer.setVolume(options.getMusicVolume());
-                installKeyBindings(root);
-                controller.restoreScreen(root);
-                root.requestFocusInWindow();
-            }, backgroundImage);
-        });
-
-        JButton[] buttons = {resumeButton, retryButton, scenesButton, optionsButton};
-        int y = 238;
-        for (JButton button : buttons) {
-            Dimension size = button.getPreferredSize();
-            int buttonX = (GameConfig.SCENE_WIDTH - size.width) / 2;
-            button.setBounds(buttonX, y, size.width, size.height);
-            button.setVisible(false);
-            pauseButtons.add(button);
-            root.add(button);
-            y += size.height + 7;
-        }
-    }
-
-    private JButton createPauseMenuButton(String text, String assetId) {
-        return GameUiFactory.createImageStateButton(
-                AssetCatalog.buttonStateUrl(assetId, "S"),
-                AssetCatalog.buttonStateUrl(assetId, "H"),
-                AssetCatalog.buttonStateUrl(assetId, "P"),
-                text,
-                PAUSE_MENU_BUTTON_WIDTH
+    private void createPauseMenu() {
+        pauseMenu = new PauseMenu(
+                this::togglePause,
+                this::resumeGame,
+                () -> leaveGameplay(() -> controller.startStage(playableStage)),
+                () -> leaveGameplay(() -> controller.showJourneySelect(playableStage.getJourneyId())),
+                this::openOptionsFromPause
         );
+        pauseMenu.install(root);
     }
 
-    private void placeButton(JButton button, int x, int y) {
-        Dimension size = button.getPreferredSize();
-        button.setBounds(x, y, size.width, size.height);
+    private void openOptionsFromPause() {
+        controller.showOptions(() -> {
+            musicPlayer.setVolume(options.getMusicVolume());
+            installInputBindings();
+            controller.restoreScreen(root);
+            root.requestFocusInWindow();
+        }, backgroundImage);
     }
 
-    private void installKeyBindings(JComponent component) {
-        removeLaneKeyBindings(component);
-
-        int[] laneKeyCodes = options.laneKeyCodes();
-        for (int laneKeyCode : laneKeyCodes) {
-            bindPress(component, laneKeyCode);
-            bindRelease(component, laneKeyCode);
-        }
-        boundLaneKeyCodes = laneKeyCodes;
-
-        bindPress(component, KeyEvent.VK_ESCAPE);
-    }
-
-    private void removeLaneKeyBindings(JComponent component) {
-        for (int laneKeyCode : boundLaneKeyCodes) {
-            component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                    .remove(KeyStroke.getKeyStroke(laneKeyCode, 0, false));
-            component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                    .remove(KeyStroke.getKeyStroke(laneKeyCode, 0, true));
-            component.getActionMap().remove("pressed-" + laneKeyCode);
-            component.getActionMap().remove("released-" + laneKeyCode);
-        }
-    }
-
-    private void bindPress(JComponent component, int keyCode) {
-        String actionKey = "pressed-" + keyCode;
-        component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                .put(KeyStroke.getKeyStroke(keyCode, 0, false), actionKey);
-        component.getActionMap().put(actionKey, new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                handleKeyPressed(keyCode);
-            }
-        });
-    }
-
-    private void bindRelease(JComponent component, int keyCode) {
-        String actionKey = "released-" + keyCode;
-        component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                .put(KeyStroke.getKeyStroke(keyCode, 0, true), actionKey);
-        component.getActionMap().put(actionKey, new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                handleKeyReleased(keyCode);
-            }
-        });
+    private void installInputBindings() {
+        inputHandler.install(root, this::handleKeyPressed, this::handleKeyReleased, this::togglePause);
     }
 
     private void tick() {
-        pruneEffects();
+        effects.prune();
 
         double rawTime = rawSecondsSinceStart();
         updateCountdown(rawTime);
@@ -277,7 +187,6 @@ public class RhythmGameScreen {
         currentChartTime = currentTime;
 
         updateBeatPulse(audioTime);
-        updateDebugOverlay(audioTime, currentTime);
         spawnNotes(noteData, currentTime, noteSpeed);
         updateActiveNotes(currentTime, noteSpeed);
 
@@ -396,11 +305,6 @@ public class RhythmGameScreen {
     }
 
     private void handleKeyPressed(int code) {
-        if (code == KeyEvent.VK_ESCAPE) {
-            togglePause();
-            return;
-        }
-
         if (paused || !countdownComplete) {
             return;
         }
@@ -758,10 +662,7 @@ public class RhythmGameScreen {
     }
 
     private void setPauseControlsVisible(boolean visible) {
-        pauseButton.setVisible(!visible);
-        for (JButton button : pauseButtons) {
-            button.setVisible(visible);
-        }
+        pauseMenu.setMenuVisible(visible);
     }
 
     private int laneForKey(int code) {
@@ -788,7 +689,7 @@ public class RhythmGameScreen {
 
         scoreRemainingNotesAsMisses();
         stopMusic();
-        pauseButton.setVisible(false);
+        pauseMenu.hidePauseButton();
         endingTransition = true;
         finishStartedAt = System.nanoTime();
         endFadeStartedAt = 0;
@@ -870,41 +771,7 @@ public class RhythmGameScreen {
         }
 
         lastBeatIndex = beatIndex;
-        beatPulses.add(new BeatPulse(System.nanoTime(), beatIndex % beatProfile.beatsPerMeasure() == 0));
-    }
-
-    private void updateDebugOverlay(double audioTime, double currentTime) {
-        if (beatProfile == null) {
-            debugText = String.format("Audio %.3f | Song %.3f", audioTime, currentTime);
-            return;
-        }
-
-        if (currentTime < beatProfile.firstBeatOffset()) {
-            debugText = String.format(
-                    "Audio %.3f | Song %.3f | waiting for first beat",
-                    audioTime,
-                    currentTime
-            );
-            return;
-        }
-
-        int slotsPerMeasure = beatProfile.beatsPerMeasure() * beatProfile.gridSlotsPerBeat();
-        int totalSlot = (int) Math.floor((currentTime - beatProfile.firstBeatOffset()) / beatProfile.gridSlotSeconds());
-        int measure = totalSlot / slotsPerMeasure;
-        int slot = totalSlot % slotsPerMeasure;
-        int beat = (slot / beatProfile.gridSlotsPerBeat()) + 1;
-        int beatSlot = slot % beatProfile.gridSlotsPerBeat();
-
-        debugText = String.format(
-                "Audio %.3f | Song %.3f | M %02d B %d Slot %02d (%d/%d)",
-                audioTime,
-                currentTime,
-                measure + 1,
-                beat,
-                slot,
-                beatSlot,
-                beatProfile.gridSlotsPerBeat()
-        );
+        effects.addBeatPulse(beatIndex % beatProfile.beatsPerMeasure() == 0);
     }
 
     private void recordNoteBonus(Note note, ScoreTracker.Judgment judgment, NoteVisual noteVisual) {
@@ -976,17 +843,16 @@ public class RhythmGameScreen {
     }
 
     private void createHitBurst(NoteVisual noteVisual, ScoreTracker.Judgment judgment) {
-        hitBursts.add(new HitBurst(
-                System.nanoTime(),
+        effects.addHitBurst(
                 noteVisual.centerX(),
                 JudgmentStyle.color(judgment),
                 judgment == ScoreTracker.Judgment.PERFECT,
                 false
-        ));
+        );
     }
 
     private void createGoldBurst(NoteVisual noteVisual) {
-        hitBursts.add(new HitBurst(System.nanoTime(), noteVisual.centerX(), theme.getGoldNoteColor(), true, true));
+        effects.addHitBurst(noteVisual.centerX(), theme.getGoldNoteColor(), true, true);
     }
 
     private void showStageBanner(String text, Color color) {
@@ -999,12 +865,6 @@ public class RhythmGameScreen {
         if (combo > 1) {
             comboPulseStartedAt = System.nanoTime();
         }
-    }
-
-    private void pruneEffects() {
-        long now = System.nanoTime();
-        hitBursts.removeIf(effect -> now - effect.startedAt() > 500_000_000L);
-        beatPulses.removeIf(effect -> now - effect.startedAt() > 380_000_000L);
     }
 
     private class GamePanel extends JPanel {
@@ -1140,12 +1000,6 @@ public class RhythmGameScreen {
                     85
             );
 
-            if (debugVisible) {
-                g.setFont(new Font("Arial", Font.BOLD, 14));
-                g.setColor(NoteRenderer.withOpacity(theme.getSoftTextColor(), 0.78));
-                g.drawString(debugText, 30, 585);
-            }
-
             drawTimedCenterText(
                     g,
                     judgmentText,
@@ -1226,7 +1080,7 @@ public class RhythmGameScreen {
         private void drawHitBursts(Graphics2D g) {
             long now = System.nanoTime();
 
-            for (HitBurst burst : hitBursts) {
+            for (GameplayEffects.HitBurst burst : effects.hitBursts()) {
                 double age = (now - burst.startedAt()) / 1_000_000_000.0;
                 double duration = burst.gold() ? 0.46 : 0.26;
                 double t = Math.min(1, age / duration);
@@ -1259,7 +1113,7 @@ public class RhythmGameScreen {
         private void drawBeatPulses(Graphics2D g) {
             long now = System.nanoTime();
 
-            for (BeatPulse pulse : beatPulses) {
+            for (GameplayEffects.BeatPulse pulse : effects.beatPulses()) {
                 double duration = pulse.measureStart() ? 0.36 : 0.25;
                 double t = Math.min(1, ((now - pulse.startedAt()) / 1_000_000_000.0) / duration);
                 double alpha = (pulse.measureStart() ? 0.48 : 0.28) * (1.0 - t);
@@ -1361,12 +1215,6 @@ public class RhythmGameScreen {
             FontMetrics metrics = g.getFontMetrics();
             g.drawString(text, rightX - metrics.stringWidth(text), baselineY);
         }
-    }
-
-    private record HitBurst(long startedAt, double x, Color color, boolean perfect, boolean gold) {
-    }
-
-    private record BeatPulse(long startedAt, boolean measureStart) {
     }
 
     private static final class NoteVisual {
