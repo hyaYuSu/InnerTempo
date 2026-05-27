@@ -48,7 +48,7 @@ public class ResultsScreen {
     private static final float BACKGROUND_IMAGE_OPACITY = 0.35f;
     private static final int RESULT_PANEL_WIDTH = 382;
     private static final int RESULT_PANEL_HEIGHT = 326;
-    private static final int RESULT_BUTTON_WIDTH = 170;
+    private static final int RESULT_BUTTON_WIDTH = 195;
 
     private final ScreenManager controller;
     private final SaveManager saveManager;
@@ -91,8 +91,8 @@ public class ResultsScreen {
         statsPanel.setBounds(522, 158, RESULT_PANEL_WIDTH, RESULT_PANEL_HEIGHT);
         root.add(statsPanel);
 
-        JPanel buttons = createButtonRow(nextStage);
-        buttons.setBounds(184, 524, 632, 56);
+        JPanel buttons = createButtonRow(nextStage, cleared);
+        buttons.setBounds(140, 506, 720, 84);
         root.add(buttons);
 
         return root;
@@ -162,41 +162,42 @@ public class ResultsScreen {
         return row;
     }
 
-    private JPanel createButtonRow(PlayableStage nextStage) {
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 18, 0));
+    private JPanel createButtonRow(PlayableStage nextStage, boolean cleared) {
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 24, 0));
         buttons.setOpaque(false);
 
-        JButton retryButton = GameUiFactory.createSmallButton("RETRY");
-        JButton nextButton = GameUiFactory.createSmallButton("NEXT");
-        JButton scenesButton = GameUiFactory.createSmallButton("SCENES");
-        setButtonSize(retryButton, RESULT_BUTTON_WIDTH);
-        setButtonSize(nextButton, RESULT_BUTTON_WIDTH);
-        setButtonSize(scenesButton, RESULT_BUTTON_WIDTH);
+        JButton retryButton = GameUiFactory.createImageStateButton(
+                AssetCatalog.buttonStateUrl("Rtry", "S"),
+                AssetCatalog.buttonStateUrl("Rtry", "H"),
+                AssetCatalog.buttonStateUrl("Rtry", "P"),
+                "RETRY",
+                RESULT_BUTTON_WIDTH
+        );
+        JButton scenesButton = GameUiFactory.createImageStateButton(
+                AssetCatalog.buttonStateUrl("Home", "S"),
+                AssetCatalog.buttonStateUrl("Home", "H"),
+                AssetCatalog.buttonStateUrl("Home", "P"),
+                "HOME",
+                RESULT_BUTTON_WIDTH
+        );
 
         retryButton.addActionListener(e -> controller.startStage(playableStage));
         scenesButton.addActionListener(e -> controller.showJourneySelect(playableStage.getJourneyId()));
 
-        if (nextStage != null && saveManager.isUnlocked(nextStage)) {
-            nextButton.addActionListener(e -> controller.showLore(nextStage));
-        } else {
-            nextButton.setEnabled(false);
-            nextButton.setForeground(new Color(102, 95, 82));
-            nextButton.setCursor(java.awt.Cursor.getDefaultCursor());
-        }
-
         buttons.add(retryButton);
-        if (nextStage != null) {
+        if (cleared && nextStage != null && saveManager.isUnlocked(nextStage)) {
+            JButton nextButton = GameUiFactory.createImageStateButton(
+                    AssetCatalog.buttonStateUrl("Next", "S"),
+                    AssetCatalog.buttonStateUrl("Next", "H"),
+                    AssetCatalog.buttonStateUrl("Next", "P"),
+                    "NEXT",
+                    RESULT_BUTTON_WIDTH
+            );
+            nextButton.addActionListener(e -> controller.showLore(nextStage));
             buttons.add(nextButton);
         }
         buttons.add(scenesButton);
         return buttons;
-    }
-
-    private void setButtonSize(JButton button, int width) {
-        Dimension size = new Dimension(width, 48);
-        button.setPreferredSize(size);
-        button.setMinimumSize(size);
-        button.setMaximumSize(size);
     }
 
     private String resultMessage(boolean cleared, boolean unlockedNext) {

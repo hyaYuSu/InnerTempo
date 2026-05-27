@@ -64,20 +64,32 @@ public class OptionsScreen {
     private final GameplaySettings options;
     private final SaveManager saveManager;
     private final Runnable backAction;
+    private final AnimatedGifBackground backgroundImage;
 
     public OptionsScreen(ScreenManager controller, GameplaySettings options, SaveManager saveManager) {
         this(controller, options, saveManager, controller::showMainMenu);
     }
 
     public OptionsScreen(ScreenManager controller, GameplaySettings options, SaveManager saveManager, Runnable backAction) {
+        this(controller, options, saveManager, backAction, AnimatedGifBackground.load(AssetCatalog.titleScreenUrl()));
+    }
+
+    public OptionsScreen(
+            ScreenManager controller,
+            GameplaySettings options,
+            SaveManager saveManager,
+            Runnable backAction,
+            AnimatedGifBackground backgroundImage
+    ) {
         this.controller = controller;
         this.options = options;
         this.saveManager = saveManager;
         this.backAction = backAction;
+        this.backgroundImage = backgroundImage;
     }
 
     public JPanel create() {
-        JPanel root = new OptionsBackgroundPanel(AnimatedGifBackground.load(AssetCatalog.titleScreenUrl()));
+        JPanel root = new OptionsBackgroundPanel(backgroundImage);
         root.setLayout(new GridBagLayout());
 
         JPanel card = new ParchmentCardPanel();

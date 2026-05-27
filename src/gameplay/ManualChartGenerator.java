@@ -27,7 +27,8 @@ public class ManualChartGenerator {
             Map.entry(LittleBellStage.UNDER_THE_TABLE, new FirstWavesManualChart()),
             Map.entry(LittleBellStage.RAIN_ALLEY, new StruggleManualChart()),
             Map.entry(LittleBellStage.WINDOW_LIGHT, new SteadyRhythmManualChart()),
-            Map.entry(LittleBellStage.LITTLE_BELL, new PathOfLightManualChart())
+            Map.entry(LittleBellStage.THRESHOLD_LIGHT, new PathOfLightManualChart()),
+            Map.entry(LittleBellStage.LITTLE_BELL, new OnePullOneReleaseManualChart())
     );
 
     public Optional<List<Note>> generate(PlayableStage stage) {

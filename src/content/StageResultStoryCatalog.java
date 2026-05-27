@@ -65,15 +65,16 @@ public final class StageResultStoryCatalog {
 
     private static String littleBellStory(LittleBellStage stage, boolean cleared) {
         if (!cleared) {
-            return "The sound fades before the cat can follow it. Somewhere nearby, the small bell waits.";
+            return "The fog folds back around Little Bell. The basket is still empty, and the path waits to be walked again.";
         }
 
         return switch (stage) {
-            case EMPTY_BASKET -> "The cat steps out of the basket. The missing toy has left a silence shaped like a question.";
-            case UNDER_THE_TABLE -> "The button was not the bell, but it taught the cat where the sound was not.";
-            case RAIN_ALLEY -> "Rain makes every sound smaller. Still, one chime carries through the alley.";
-            case WINDOW_LIGHT -> "The warm window remembers something, even if it cannot open.";
-            case LITTLE_BELL -> "The bell is small, but it rings. Some things return as sound, not shape.";
+            case EMPTY_BASKET -> "Little Bell keeps hold of the basket, even when nothing inside it feels heavier than stone.";
+            case UNDER_THE_TABLE -> "The city watches, but Little Bell keeps moving through the crates and shadows.";
+            case RAIN_ALLEY -> "The cold corner cannot make Little Bell disappear, even when the old joy feels lost.";
+            case WINDOW_LIGHT -> "Little Bell is tired, but still refuses to become another piece of the alley.";
+            case THRESHOLD_LIGHT -> "The warm light cuts through the fog, and Little Bell chooses to step toward it.";
+            case LITTLE_BELL -> "Little Bell is seen without the toy, without the old self, and that is enough.";
         };
     }
 }

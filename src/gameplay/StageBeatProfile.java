@@ -45,7 +45,7 @@ public record StageBeatProfile(
     }
 
     public static StageBeatProfile firstWaves() {
-        return new StageBeatProfile(0.52245, 60.0 / 100.0, 4, 8);
+        return new StageBeatProfile(0.0, 60.0 / 80.0, 4, 8);
     }
 
     public static StageBeatProfile struggle() {
@@ -66,6 +66,7 @@ public record StageBeatProfile(
             case UNDER_THE_TABLE -> firstWaves();
             case RAIN_ALLEY -> struggle();
             case WINDOW_LIGHT -> steadyRhythm();
+            case THRESHOLD_LIGHT -> pathOfLight();
             case LITTLE_BELL -> pathOfLight();
         };
     }

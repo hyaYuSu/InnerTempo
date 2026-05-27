@@ -179,6 +179,7 @@ public final class AssetCatalog {
             case UNDER_THE_TABLE -> WAVES_FIRST_WAVES_MUSIC;
             case RAIN_ALLEY -> WAVES_STRUGGLE_MUSIC;
             case WINDOW_LIGHT -> WAVES_STEADY_RHYTHM_MUSIC;
+            case THRESHOLD_LIGHT -> WAVES_PATH_OF_LIGHT_MUSIC;
             case LITTLE_BELL -> WAVES_PATH_OF_LIGHT_MUSIC;
         };
     }
@@ -200,8 +201,8 @@ public final class AssetCatalog {
             case UNDER_THE_TABLE -> new String[]{LITTLE_BELL_SCENE_2A, LITTLE_BELL_SCENE_2B};
             case RAIN_ALLEY -> new String[]{LITTLE_BELL_SCENE_3};
             case WINDOW_LIGHT -> new String[]{LITTLE_BELL_SCENE_4};
+            case THRESHOLD_LIGHT -> new String[]{LITTLE_BELL_SCENE_5};
             case LITTLE_BELL -> new String[]{
-                    LITTLE_BELL_SCENE_5,
                     LITTLE_BELL_SCENE_6A,
                     LITTLE_BELL_SCENE_6B,
                     LITTLE_BELL_SCENE_6C,
@@ -216,7 +217,8 @@ public final class AssetCatalog {
             case UNDER_THE_TABLE -> LITTLE_BELL_SCENE_2A;
             case RAIN_ALLEY -> LITTLE_BELL_SCENE_3;
             case WINDOW_LIGHT -> LITTLE_BELL_SCENE_4;
-            case LITTLE_BELL -> LITTLE_BELL_SCENE_5;
+            case THRESHOLD_LIGHT -> LITTLE_BELL_SCENE_5;
+            case LITTLE_BELL -> LITTLE_BELL_SCENE_6A;
         };
     }
 }

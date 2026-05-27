@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Random;
 
 public class StageChartGenerator {
+    private static final double MUSIC_END_PADDING_SECONDS = 0.75;
+
     private final ManualChartGenerator manualChartGenerator;
 
     public StageChartGenerator() {
@@ -23,8 +25,11 @@ public class StageChartGenerator {
 
     public List<Note> generateChart(PlayableStage stage, double targetDurationSeconds) {
         return manualChartGenerator.generate(stage)
-                .map(this::polishChart)
-                .orElseGet(() -> polishChart(generate(ChartSettings.forStage(stage, targetDurationSeconds))));
+                .map(notes -> trimToDuration(polishChart(notes), targetDurationSeconds))
+                .orElseGet(() -> trimToDuration(
+                        polishChart(generate(ChartSettings.forStage(stage, targetDurationSeconds))),
+                        targetDurationSeconds
+                ));
     }
 
     private List<Note> polishChart(List<Note> sourceNotes) {
@@ -53,6 +58,23 @@ public class StageChartGenerator {
         }
 
         return playableNotes;
+    }
+
+    private List<Note> trimToDuration(List<Note> notes, double targetDurationSeconds) {
+        if (targetDurationSeconds <= 0) {
+            return notes;
+        }
+
+        double latestEndTime = Math.max(0, targetDurationSeconds - MUSIC_END_PADDING_SECONDS);
+        List<Note> trimmedNotes = new ArrayList<>();
+
+        for (Note note : notes) {
+            if (note.getHoldEndTime() <= latestEndTime) {
+                trimmedNotes.add(note);
+            }
+        }
+
+        return trimmedNotes;
     }
 
     private List<Note> generate(ChartSettings settings) {
@@ -270,7 +292,8 @@ public class StageChartGenerator {
                 case UNDER_THE_TABLE -> forWaveStage(WaveStage.FIRST_WAVES, targetDurationSeconds);
                 case RAIN_ALLEY -> forWaveStage(WaveStage.STRUGGLE, targetDurationSeconds);
                 case WINDOW_LIGHT -> forWaveStage(WaveStage.STORM, targetDurationSeconds);
-                case LITTLE_BELL -> forWaveStage(WaveStage.BEYOND_THE_ISLAND, targetDurationSeconds);
+                case THRESHOLD_LIGHT -> forWaveStage(WaveStage.BEYOND_THE_ISLAND, targetDurationSeconds);
+                case LITTLE_BELL -> forWaveStage(WaveStage.ONE_PULL_ONE_RELEASE, targetDurationSeconds);
             };
         }
     }

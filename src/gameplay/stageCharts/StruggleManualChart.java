@@ -8,7 +8,7 @@ import model.Note;
 import java.util.List;
 
 public class StruggleManualChart implements ManualStageChart {
-    private static final int TOTAL_MEASURES = 25;
+    private static final int TOTAL_MEASURES = 28;
 
     @Override
     public List<Note> createNotes() {
@@ -46,13 +46,16 @@ public class StruggleManualChart implements ManualStageChart {
 
     private void addRoughPattern(ChartBuilder chart, int measure) {
         switch (measure % 3) {
-            case 0 -> chart.taps(measure, new int[] {0, 4, 8, 10, 12}, chart.lanesFor(measure, 0, 2, 1, 3, 2));
+            case 0 -> {
+                chart.taps(measure, new int[] {0, 4, 6, 8, 10, 12}, chart.lanesFor(measure, 0, 2, 3, 1, 3, 2));
+                chart.gold(measure, 14, chart.laneFor(measure, 0));
+            }
             case 1 -> {
                 chart.hold(measure, 0, chart.laneFor(measure, 3), 8);
-                chart.taps(measure, new int[] {8, 12, 14}, chart.lanesFor(measure, 0, 1, 2));
+                chart.taps(measure, new int[] {8, 10, 12, 14}, chart.lanesFor(measure, 0, 3, 1, 2));
             }
             default -> {
-                chart.taps(measure, new int[] {0, 3, 6, 8, 12}, chart.lanesFor(measure, 3, 1, 2, 0, 1));
+                chart.taps(measure, new int[] {0, 3, 6, 8, 10, 12}, chart.lanesFor(measure, 3, 1, 2, 0, 3, 1));
                 chart.gold(measure, 10, chart.laneFor(measure, 3));
             }
         }
@@ -60,14 +63,14 @@ public class StruggleManualChart implements ManualStageChart {
 
     private void addStormPattern(ChartBuilder chart, int measure) {
         switch (measure % 4) {
-            case 0 -> chart.taps(measure, new int[] {0, 4, 6, 8, 12, 14}, chart.lanesFor(measure, 0, 1, 3, 2, 1, 0));
+            case 0 -> chart.taps(measure, new int[] {0, 2, 4, 6, 8, 12, 14}, chart.lanesFor(measure, 0, 2, 1, 3, 2, 1, 0));
             case 1 -> {
                 chart.hold(measure, 0, chart.laneFor(measure, 2), 10);
-                chart.taps(measure, new int[] {10, 12, 14}, chart.lanesFor(measure, 3, 1, 0));
+                chart.taps(measure, new int[] {10, 11, 12, 14}, chart.lanesFor(measure, 3, 2, 1, 0));
             }
-            case 2 -> chart.taps(measure, new int[] {0, 2, 4, 8, 10, 12}, chart.lanesFor(measure, 3, 2, 1, 0, 2, 1));
+            case 2 -> chart.taps(measure, new int[] {0, 2, 4, 6, 8, 10, 12}, chart.lanesFor(measure, 3, 2, 1, 3, 0, 2, 1));
             default -> {
-                chart.taps(measure, new int[] {0, 4, 8, 12}, chart.lanesFor(measure, 1, 3, 0, 2));
+                chart.taps(measure, new int[] {0, 4, 6, 8, 10, 12}, chart.lanesFor(measure, 1, 3, 2, 0, 1, 2));
                 chart.gold(measure, 14, chart.laneFor(measure, 0));
             }
         }
@@ -77,11 +80,14 @@ public class StruggleManualChart implements ManualStageChart {
         switch (measure % 3) {
             case 0 -> {
                 chart.hold(measure, 0, chart.laneFor(measure, 1), 12);
-                chart.taps(measure, new int[] {12}, chart.lanesFor(measure, 3));
+                chart.taps(measure, new int[] {12, 14}, chart.lanesFor(measure, 3, 0));
             }
-            case 1 -> chart.taps(measure, new int[] {0, 4, 8, 12}, chart.lanesFor(measure, 0, 1, 2, 3));
+            case 1 -> {
+                chart.taps(measure, new int[] {0, 4, 6, 8, 10, 12}, chart.lanesFor(measure, 0, 1, 3, 2, 0, 3));
+                chart.gold(measure, 14, chart.laneFor(measure, 1));
+            }
             default -> {
-                chart.taps(measure, new int[] {0, 8, 12}, chart.lanesFor(measure, 3, 1, 0));
+                chart.taps(measure, new int[] {0, 4, 8, 10, 12, 14}, chart.lanesFor(measure, 3, 2, 1, 3, 0, 2));
                 chart.gold(measure, 14, chart.laneFor(measure, 2));
             }
         }

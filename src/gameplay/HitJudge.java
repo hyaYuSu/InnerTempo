@@ -32,6 +32,10 @@ public class HitJudge {
         return scaled(BAD_WINDOW);
     }
 
+    public double goodWindow() {
+        return scaled(GOOD_WINDOW);
+    }
+
     public ScoreTracker.Judgment worse(ScoreTracker.Judgment first, ScoreTracker.Judgment second) {
         return rank(first) <= rank(second) ? first : second;
     }

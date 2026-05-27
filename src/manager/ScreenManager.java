@@ -9,6 +9,7 @@ import model.Stages.PlayableStage;
 import score.ScoreTracker;
 import screens.*;
 import settings.GameplaySettings;
+import ui.AnimatedGifBackground;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -54,6 +55,10 @@ public class ScreenManager {
 
     public void showOptions(Runnable backAction) {
         setScreen(new OptionsScreen(this, options, saveManager, backAction).create());
+    }
+
+    public void showOptions(Runnable backAction, AnimatedGifBackground backgroundImage) {
+        setScreen(new OptionsScreen(this, options, saveManager, backAction, backgroundImage).create());
     }
 
     public void restoreScreen(JPanel screen) {

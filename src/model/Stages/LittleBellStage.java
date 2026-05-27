@@ -7,7 +7,8 @@ public enum LittleBellStage implements PlayableStage {
     UNDER_THE_TABLE(2, "Under the Table"),
     RAIN_ALLEY(3, "Rain Alley"),
     WINDOW_LIGHT(4, "Window Light"),
-    LITTLE_BELL(5, "Little Bell");
+    THRESHOLD_LIGHT(5, "Threshold Light"),
+    LITTLE_BELL(6, "Little Bell");
 
     private final int number;
     private final String title;

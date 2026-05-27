@@ -358,6 +358,7 @@ public class StageResultStoryScreen {
                 case UNDER_THE_TABLE -> new Color(43, 29, 24);
                 case RAIN_ALLEY -> new Color(38, 59, 86);
                 case WINDOW_LIGHT -> new Color(24, 34, 59);
+                case THRESHOLD_LIGHT -> new Color(164, 117, 55);
                 case LITTLE_BELL -> new Color(212, 138, 112);
             };
         }
@@ -372,6 +373,7 @@ public class StageResultStoryScreen {
                 case UNDER_THE_TABLE -> new Color(9, 7, 6);
                 case RAIN_ALLEY -> new Color(9, 17, 28);
                 case WINDOW_LIGHT -> new Color(60, 36, 28);
+                case THRESHOLD_LIGHT -> new Color(52, 38, 31);
                 case LITTLE_BELL -> new Color(90, 49, 69);
             };
         }

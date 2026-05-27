@@ -303,19 +303,16 @@ public class LoreScreen {
             return switch (littleBellStage) {
                 case UNDER_THE_TABLE -> cueIndex < 3 ? 0 : 1;
                 case LITTLE_BELL -> {
-                    if (cueIndex <= 1) {
+                    if (cueIndex <= 0) {
                         yield 0;
                     }
-                    if (cueIndex <= 3) {
+                    if (cueIndex <= 2) {
                         yield 1;
                     }
-                    if (cueIndex <= 5) {
+                    if (cueIndex <= 4) {
                         yield 2;
                     }
-                    if (cueIndex <= 7) {
-                        yield 3;
-                    }
-                    yield 4;
+                    yield 3;
                 }
                 default -> 0;
             };
@@ -398,6 +395,7 @@ public class LoreScreen {
                 case UNDER_THE_TABLE -> new Color(43, 29, 24);
                 case RAIN_ALLEY -> new Color(38, 59, 86);
                 case WINDOW_LIGHT -> new Color(24, 34, 59);
+                case THRESHOLD_LIGHT -> new Color(164, 117, 55);
                 case LITTLE_BELL -> new Color(212, 138, 112);
             };
         }
@@ -412,6 +410,7 @@ public class LoreScreen {
                 case UNDER_THE_TABLE -> new Color(9, 7, 6);
                 case RAIN_ALLEY -> new Color(9, 17, 28);
                 case WINDOW_LIGHT -> new Color(60, 36, 28);
+                case THRESHOLD_LIGHT -> new Color(52, 38, 31);
                 case LITTLE_BELL -> new Color(90, 49, 69);
             };
         }

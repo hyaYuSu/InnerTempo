@@ -176,7 +176,7 @@ public class RhythmGameScreen {
                 installKeyBindings(root);
                 controller.restoreScreen(root);
                 root.requestFocusInWindow();
-            });
+            }, backgroundImage);
         });
 
         JButton[] buttons = {resumeButton, retryButton, scenesButton, optionsButton};
@@ -466,6 +466,10 @@ public class RhythmGameScreen {
         ScoreTracker.Judgment judgment = hitJudge.judge(closestDelta);
 
         if (note.isHoldNote()) {
+            if (closestSignedDelta > hitJudge.goodWindow()) {
+                return;
+            }
+
             note.setHolding(true);
             note.setHoldStartedAt(currentTime);
             note.setHoldStartOffsetSeconds(closestSignedDelta);

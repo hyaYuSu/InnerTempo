@@ -8,9 +8,9 @@ import model.Note;
 import java.util.List;
 
 public class FirstWavesManualChart implements ManualStageChart {
-    private static final int PLAYABLE_START_MEASURE = 2;
+    private static final int PLAYABLE_START_MEASURE = 1;
     private static final int MAIN_ENTRANCE_MEASURE = 8;
-    private static final int TOTAL_MEASURES = 23;
+    private static final int TOTAL_MEASURES = 19;
 
     @Override
     public List<Note> createNotes() {
